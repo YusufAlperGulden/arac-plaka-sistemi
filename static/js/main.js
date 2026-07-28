@@ -222,6 +222,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // ---- RAPORLAR MENÜSÜ AKIŞI ----
     
+    // Rapor state
+    let currentRecords = [];
+    const filterActionType = document.getElementById('filter-action-type');
+    const filterDriver = document.getElementById('filter-driver');
+    const sortBy = document.getElementById('sort-by');
+
     reportMenuBtn.addEventListener('click', () => {
         hideAllSections();
         reportsMenuSection.classList.remove('hidden');
@@ -256,7 +262,7 @@ document.addEventListener('DOMContentLoaded', () => {
     viewVehicleReportBtn.addEventListener('click', () => {
         const selectedPlate = reportPlateSelect.value;
         if(selectedPlate) {
-            reportTitle.textContent = `Araç Raporu: ${selectedPlate}`;
+            reportTitle.textContent = `🚗 Araç Raporu: ${selectedPlate}`;
             fetchAndShowReport(`/api/reports/plate/${encodeURIComponent(selectedPlate)}`);
         }
     });
@@ -267,6 +273,11 @@ document.addEventListener('DOMContentLoaded', () => {
         reportsMenuSection.classList.add('active');
     });
 
+    // Filtreleme ve Sıralama Event Listener'ları
+    filterActionType.addEventListener('change', applyFiltersAndSort);
+    filterDriver.addEventListener('input', applyFiltersAndSort);
+    sortBy.addEventListener('change', applyFiltersAndSort);
+
     async function fetchAndShowReport(apiUrl) {
         hideAllSections();
         reportDetailSection.classList.remove('hidden');
@@ -274,12 +285,18 @@ document.addEventListener('DOMContentLoaded', () => {
         
         reportTableBody.innerHTML = '<tr><td colspan="11" style="text-align:center;">Yükleniyor...</td></tr>';
         
+        // Reset filters
+        filterActionType.value = 'all';
+        filterDriver.value = '';
+        sortBy.value = 'date-desc';
+
         try {
             const response = await fetch(apiUrl);
             const result = await response.json();
             
             if (response.ok && result.success) {
-                renderTable(result.records);
+                currentRecords = result.records; // Veriyi kaydet
+                applyFiltersAndSort(); // Tabloyu render et
             } else {
                 reportTableBody.innerHTML = '<tr><td colspan="11" style="text-align:center; color:#ef4444;">Veriler alınamadı.</td></tr>';
                 window.showToast('Raporlar alınamadı.', 'error');
@@ -289,6 +306,56 @@ document.addEventListener('DOMContentLoaded', () => {
             reportTableBody.innerHTML = '<tr><td colspan="11" style="text-align:center; color:#ef4444;">Sunucu bağlantı hatası.</td></tr>';
             window.showToast('Sunucu ile iletişim kurulamadı.', 'error');
         }
+    }
+
+    function parseDate(dateStr) {
+        // Örn format: "19.01.2026 15:12:16"
+        if (!dateStr) return new Date(0);
+        const parts = dateStr.split(' ');
+        if(parts.length !== 2) return new Date(0);
+        const dateParts = parts[0].split('.');
+        const timeParts = parts[1].split(':');
+        if(dateParts.length !== 3 || timeParts.length !== 3) return new Date(0);
+        
+        // Date(year, monthIndex, day, hours, minutes, seconds)
+        return new Date(dateParts[2], dateParts[1] - 1, dateParts[0], timeParts[0], timeParts[1], timeParts[2]);
+    }
+
+    function applyFiltersAndSort() {
+        let filtered = [...currentRecords];
+
+        // Filtreleme - Hareket Tipi
+        const typeFilter = filterActionType.value;
+        if (typeFilter !== 'all') {
+            filtered = filtered.filter(r => (r.action_type || '').includes(typeFilter));
+        }
+
+        // Filtreleme - Sürücü Adı
+        const driverFilter = filterDriver.value.toLowerCase();
+        if (driverFilter.trim() !== '') {
+            filtered = filtered.filter(r => (r.driver || '').toLowerCase().includes(driverFilter));
+        }
+
+        // Sıralama
+        const sortMode = sortBy.value;
+        filtered.sort((a, b) => {
+            if (sortMode === 'date-desc') {
+                return parseDate(b.add_date) - parseDate(a.add_date);
+            } else if (sortMode === 'date-asc') {
+                return parseDate(a.add_date) - parseDate(b.add_date);
+            } else if (sortMode === 'distance-desc') {
+                return parseFloat(b.distance || 0) - parseFloat(a.distance || 0);
+            } else if (sortMode === 'distance-asc') {
+                return parseFloat(a.distance || 0) - parseFloat(b.distance || 0);
+            } else if (sortMode === 'plate-asc') {
+                return (a.plate || '').localeCompare(b.plate || '');
+            } else if (sortMode === 'plate-desc') {
+                return (b.plate || '').localeCompare(a.plate || '');
+            }
+            return 0;
+        });
+
+        renderTable(filtered);
     }
 
     function renderTable(records) {

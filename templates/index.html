@@ -158,6 +158,36 @@
                 </div>
             </div>
             
+            <!-- FİLTRELEME VE SIRALAMA ÇUBUĞU -->
+            <div class="filter-sort-bar glass-panel" style="margin-bottom: 20px; padding: 15px; display: flex; gap: 15px; flex-wrap: wrap; align-items: center; justify-content: space-between;">
+                
+                <div class="filter-group" style="display: flex; gap: 10px; align-items: center; flex: 1; min-width: 300px;">
+                    <strong style="color: var(--text-secondary); font-size: 0.9rem;">Filtrele:</strong>
+                    
+                    <select id="filter-action-type" style="padding: 8px; font-size: 0.9rem; flex: 1;">
+                        <option value="all">Tüm Hareketler</option>
+                        <option value="Diğer">Diğer</option>
+                        <option value="Periyodik Bakım">Periyodik Bakım</option>
+                        <option value="Kurum İçi Operasyon...">Kurum İçi Operasyon</option>
+                    </select>
+                    
+                    <input type="text" id="filter-driver" placeholder="Sürücü ara..." style="padding: 8px; font-size: 0.9rem; flex: 1; background: rgba(15, 23, 42, 0.6); border: 1px solid var(--glass-border); border-radius: 8px; color: white;">
+                </div>
+
+                <div class="sort-group" style="display: flex; gap: 10px; align-items: center; min-width: 250px;">
+                    <strong style="color: var(--text-secondary); font-size: 0.9rem;">Sırala:</strong>
+                    <select id="sort-by" style="padding: 8px; font-size: 0.9rem; flex: 1;">
+                        <option value="date-desc">Ekleme Tarihi (En Yeni)</option>
+                        <option value="date-asc">Ekleme Tarihi (En Eski)</option>
+                        <option value="distance-desc">Yapılan Mesafe (En Çok)</option>
+                        <option value="distance-asc">Yapılan Mesafe (En Az)</option>
+                        <option value="plate-asc">Plaka (A-Z)</option>
+                        <option value="plate-desc">Plaka (Z-A)</option>
+                    </select>
+                </div>
+                
+            </div>
+
             <div class="table-container" style="overflow-x: auto; white-space: nowrap;">
                 <table class="modern-table">
                     <thead>
