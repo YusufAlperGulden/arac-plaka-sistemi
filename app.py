@@ -9,11 +9,10 @@ USERS_DB = {
     "kullanici": "sifre123"
 }
 
+# Dummy veri tabanı simülasyonu - Plakalar ve Araç İsimleri
 VEHICLES_DB = {
     "34KM4969": "2016 TRANSİT/TOUR...",
-    "34EZS794": "RENAULT 2016 CLIO",
-    "35 GHI 789": "FIAT EGEA 2020",
-    "07 JKL 012": "FORD FOCUS 2018"
+    "34EZS794": "RENAULT 2016 CLIO"
 }
 
 # Aktif (Başlamış ama bitmemiş) hareketler: plate -> { details }
