@@ -121,7 +121,76 @@ document.addEventListener('DOMContentLoaded', () => {
         
         if (window.cameraController) {
             window.cameraController.startCamera();
+            startOcrLoop();
         }
+    }
+    
+    let ocrInterval = null;
+    
+    function stopOcrLoop() {
+        if (ocrInterval) {
+            clearInterval(ocrInterval);
+            ocrInterval = null;
+        }
+    }
+    
+    function startOcrLoop() {
+        stopOcrLoop();
+        // Sadece Tesseract.js yüklüyse ve adım 1 ise çalıştır
+        if (typeof Tesseract === 'undefined') return;
+        
+        ocrInterval = setInterval(async () => {
+            if (state.currentStep !== 1 || !window.cameraController || !window.cameraController.videoElement || window.cameraController.videoElement.readyState !== 4) {
+                return; // Video henüz hazır değil veya yanlış adım
+            }
+            
+            const video = window.cameraController.videoElement;
+            const canvas = document.createElement('canvas');
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            
+            try {
+                // Hızlı tarama için logları kapat ve İngilizce (genel harf/rakam) modelini kullan
+                const result = await Tesseract.recognize(canvas, 'eng', { logger: m => {} });
+                const text = result.data.text;
+                
+                // Plaka formatı arama: Örn 34 ABC 12 veya 34ABC123
+                // Boşluklu veya boşluksuz 2 rakam, 1-3 harf, 2-4 rakam
+                const plateRegex = /([0-9]{2})\s*([A-Z]{1,3})\s*([0-9]{2,4})/gi;
+                const match = plateRegex.exec(text);
+                
+                if (match) {
+                    const detectedPlate = (match[1] + match[2] + match[3]).toUpperCase();
+                    
+                    // Bulunan plaka sistemde (dropdown'da) kayıtlı mı?
+                    let found = false;
+                    for (let i = 0; i < plateSelect.options.length; i++) {
+                        if (plateSelect.options[i].value === detectedPlate) {
+                            found = true;
+                            plateSelect.value = detectedPlate;
+                            break;
+                        }
+                    }
+                    
+                    if (found) {
+                        window.showToast(`Plaka Algılandı: ${detectedPlate}`, 'success');
+                        processBtn.disabled = false;
+                        stopOcrLoop(); // Döngüyü durdur
+                        
+                        // Görsel efekt (Yeşil parlama)
+                        const overlay = document.getElementById('camera-overlay');
+                        if(overlay) {
+                            overlay.style.background = 'rgba(34, 197, 94, 0.5)';
+                            setTimeout(() => { overlay.style.background = 'none'; }, 1000);
+                        }
+                    }
+                }
+            } catch (err) {
+                console.error("OCR Tarama Hatası:", err);
+            }
+        }, 2000); // 2 saniyede bir kare analizi yap (sunucuyu/tarayıcıyı yormamak için)
     }
 
     function renderStep() {
