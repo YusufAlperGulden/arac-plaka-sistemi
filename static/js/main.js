@@ -243,6 +243,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const ocrOriginalCanvas = document.getElementById('ocr-original-crop-canvas'); // Yeni eklendi
 
     let currentOcrPlate = null;
+    let currentOcrSource = null;
 
     /**
      * Plaka ayrıştırma ve İl kodu (01-81) doğrulaması.
@@ -485,76 +486,97 @@ document.addEventListener('DOMContentLoaded', () => {
                 ];
                 
                 let bestMatch = null;
+                let usedSource = null;
                 const candidates = [];
                 
-                // Adım 1: Gemini API
-                try {
-                    const base64Image = canvas.toDataURL('image/jpeg', 0.8);
-                    const response = await fetch('/api/gemini-ocr', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ image: base64Image })
-                    });
-                    
-                    const data = await response.json();
-                    
-                    if (data.success && data.plate) {
-                        const parsed = parseTurkishPlate(data.plate);
-                        if (parsed) {
-                            bestMatch = {
-                                text: parsed.normalized,
-                                confidence: 99, 
-                                parts: [parsed.provinceCode.toString().padStart(2, '0'), parsed.letters, parsed.digits],
-                                canvasContext: ctx.getImageData(0, 0, canvas.width, canvas.height),
-                                canvasW: canvas.width,
-                                canvasH: canvas.height
-                            };
+                const abortController = new AbortController();
+                const timeoutId = setTimeout(() => abortController.abort(), OCR_TOTAL_TIMEOUT_MS);
+
+                const pipelinePromise = (async () => {
+                    // Adım 1: Gemini API
+                    try {
+                        const base64Image = canvas.toDataURL('image/jpeg', 0.8);
+                        const response = await fetch('/api/gemini-ocr', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ image: base64Image }),
+                            signal: abortController.signal
+                        });
+                        
+                        if (response.ok) {
+                            const data = await response.json();
+                            if (data.success && data.plate) {
+                                const parsed = parseTurkishPlate(data.plate);
+                                if (parsed) {
+                                    bestMatch = {
+                                        text: parsed.normalized,
+                                        confidence: null, 
+                                        parts: [parsed.provinceCode.toString().padStart(2, '0'), parsed.letters, parsed.digits],
+                                        canvasContext: ctx.getImageData(0, 0, canvas.width, canvas.height),
+                                        canvasW: canvas.width,
+                                        canvasH: canvas.height
+                                    };
+                                    usedSource = "gemini";
+                                }
+                            }
+                        } else {
+                            console.warn("Gemini API HTTP Hata:", response.status);
                         }
+                    } catch (err) {
+                        if (err.name === 'AbortError') throw new OcrTimeoutError();
+                        console.warn("Gemini API isteği başarısız oldu, Tesseract Fallback başlıyor...", err);
                     }
-                } catch (err) {
-                    console.warn("Gemini API çağrısı başarısız oldu, Tesseract Fallback başlıyor...", err);
-                }
 
-                // Adım 2: Fallback (Tesseract)
-                if (!bestMatch) {
-                    for (const stage of stages) {
-                        if (sessionId !== ocrSessionId) break;
+                    // Adım 2: Fallback (Tesseract)
+                    if (!bestMatch) {
+                        for (const stage of stages) {
+                            if (sessionId !== ocrSessionId) break;
 
-                        ctx.putImageData(originalImageData, 0, 0);
-                        stage.apply(ctx, canvas.width, canvas.height);
-                        
-                        const result = await recognizeWithTimeout(ocrWorker, canvas, OCR_TOTAL_TIMEOUT_MS);
-                        if (sessionId !== ocrSessionId) break;
-
-                        const text = result.data.text;
-                        const confidence = result.data.confidence;
-                        const parsed = parseTurkishPlate(text);
-                        
-                        if (parsed && confidence >= OCR_MIN_CONFIDENCE) {
-                            candidates.push({
-                                text: parsed.normalized,
-                                confidence: confidence,
-                                parts: [parsed.provinceCode.toString().padStart(2, '0'), parsed.letters, parsed.digits],
-                                canvasContext: ctx.getImageData(0, 0, canvas.width, canvas.height),
-                                canvasW: canvas.width,
-                                canvasH: canvas.height
-                            });
+                            ctx.putImageData(originalImageData, 0, 0);
+                            stage.apply(ctx, canvas.width, canvas.height);
                             
-                            if (confidence >= 85) {
-                                break;
+                            const result = await ocrWorker.recognize(canvas);
+                            if (sessionId !== ocrSessionId) break;
+
+                            const text = result.data.text;
+                            const confidence = result.data.confidence;
+                            const parsed = parseTurkishPlate(text);
+                            
+                            if (parsed && confidence >= OCR_MIN_CONFIDENCE) {
+                                candidates.push({
+                                    text: parsed.normalized,
+                                    confidence: confidence,
+                                    parts: [parsed.provinceCode.toString().padStart(2, '0'), parsed.letters, parsed.digits],
+                                    canvasContext: ctx.getImageData(0, 0, canvas.width, canvas.height),
+                                    canvasW: canvas.width,
+                                    canvasH: canvas.height
+                                });
+                                
+                                if (confidence >= 85) {
+                                    break;
+                                }
                             }
                         }
+                        if (candidates.length > 0) {
+                            candidates.sort((a, b) => b.confidence - a.confidence);
+                            bestMatch = candidates[0];
+                            usedSource = "tesseract";
+                        }
                     }
-                    if (candidates.length > 0) {
-                        candidates.sort((a, b) => b.confidence - a.confidence);
-                        bestMatch = candidates[0];
-                    }
-                }
+                })();
+
+                const timeoutPromise = new Promise((_, reject) => {
+                    setTimeout(() => reject(new OcrTimeoutError()), OCR_TOTAL_TIMEOUT_MS);
+                });
+
+                await Promise.race([pipelinePromise, timeoutPromise]);
+                clearTimeout(timeoutId);
 
                 if (sessionId !== ocrSessionId) return; // İptal edildiyse UI işlemleri yapma
                 
                 if (bestMatch) {
                     currentOcrPlate = bestMatch.text;
+                    currentOcrSource = usedSource;
                     
                     if (ocrDebugCanvas) {
                         ocrDebugCanvas.width = bestMatch.canvasW;
@@ -563,14 +585,19 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                     
                     ocrResultText.textContent = bestMatch.parts[0] + " " + bestMatch.parts[1] + " " + bestMatch.parts[2];
-                    ocrConfidence.textContent = "%" + Math.round(bestMatch.confidence);
                     
-                    if (bestMatch.confidence > 80) {
+                    if (currentOcrSource === "gemini") {
+                        ocrConfidence.textContent = "Gemini API sonucu";
                         ocrConfidence.style.color = "#4ade80";
-                        ocrConfidence.innerHTML += " (Yüksek)";
                     } else {
-                        ocrConfidence.style.color = "#facc15";
-                        ocrConfidence.innerHTML += " (Düşük güven, lütfen kontrol edin!)";
+                        ocrConfidence.textContent = "%" + Math.round(bestMatch.confidence);
+                        if (bestMatch.confidence > 80) {
+                            ocrConfidence.style.color = "#4ade80";
+                            ocrConfidence.innerHTML += " (Yüksek, Yerel OCR)";
+                        } else {
+                            ocrConfidence.style.color = "#facc15";
+                            ocrConfidence.innerHTML += " (Düşük güven, Yerel OCR, lütfen kontrol edin!)";
+                        }
                     }
                     
                     let currentMatchedOption = findRegisteredPlateOption(currentOcrPlate);
@@ -593,17 +620,18 @@ document.addEventListener('DOMContentLoaded', () => {
                     window.showToast('Plaka net okunamadı. Çerçeveye tam oturtup tekrar deneyin.', 'error');
                 }
             } catch (err) {
-                if (err instanceof OcrTimeoutError) {
+                if (err instanceof OcrTimeoutError || err.name === "OcrTimeoutError") {
                     invalidateOcrSession();
                     await resetOcrWorker();
-                }
-                if (sessionId === ocrSessionId) {
+                    window.showToast('İşlem zaman aşımına uğradı.', 'error');
+                } else if (sessionId === ocrSessionId) {
                     console.error("OCR Hatası:", err);
-                    window.showToast(err.name === "OcrTimeoutError" ? 'İşlem zaman aşımına uğradı.' : 'Okuma işlemi sırasında hata oluştu.', 'error');
+                    window.showToast('Okuma işlemi sırasında hata oluştu.', 'error');
                 }
             } finally {
-                if (sessionId === ocrSessionId) {
-                    isOcrProcessing = false;
+                // UI Deadlock fix: always reset processing state even if session changed
+                isOcrProcessing = false;
+                if (triggerOcrBtn) {
                     if (ocrWorker) {
                         triggerOcrBtn.textContent = "📷 Plakayı Oku";
                         triggerOcrBtn.disabled = false;
@@ -687,6 +715,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         
         currentOcrPlate = null;
+        currentOcrSource = null;
         if (ocrManualInput) ocrManualInput.value = "";
         clearCanvas(ocrOriginalCanvas);
         clearCanvas(ocrDebugCanvas);
@@ -996,7 +1025,7 @@ document.addEventListener('DOMContentLoaded', () => {
         plateSelect.innerHTML = '<option value="" disabled selected>Plaka Seçin...</option>';
         plates.forEach(p => {
             const opt = document.createElement('option');
-            opt.value = p; opt.textContent = p;
+            opt.value = p; opt.dataset.plate = p; opt.textContent = p;
             plateSelect.appendChild(opt);
         });
         if (state.plate) plateSelect.value = state.plate;
@@ -1007,7 +1036,7 @@ document.addEventListener('DOMContentLoaded', () => {
         reportPlateSelect.innerHTML = '<option value="" disabled selected>Plaka Seçin...</option>';
         plates.forEach(p => {
             const opt = document.createElement('option');
-            opt.value = p; opt.textContent = p;
+            opt.value = p; opt.dataset.plate = p; opt.textContent = p;
             reportPlateSelect.appendChild(opt);
         });
         viewVehicleReportBtn.disabled = true;
