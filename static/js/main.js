@@ -423,6 +423,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 return (a.plate || '').localeCompare(b.plate || '');
             } else if (sortMode === 'plate-desc') {
                 return (b.plate || '').localeCompare(a.plate || '');
+            } else if (sortMode === 'driver-asc') {
+                return (a.driver || '').localeCompare(b.driver || '');
+            } else if (sortMode === 'driver-desc') {
+                return (b.driver || '').localeCompare(a.driver || '');
             }
             return 0;
         });
