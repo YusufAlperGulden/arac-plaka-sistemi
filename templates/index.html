@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Plaka Okuma ve Yönetim Sistemi</title>
+    <!-- Google Fonts üzerinden modern font (Inter) dahil ediliyor -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Özel CSS dosyamız -->
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+
+    <!-- Bildirim (Toast) Mesajları Alanı -->
+    <div id="toast-container"></div>
+
+    <!-- Giriş Ekranı (Login Section) -->
+    <section id="login-section" class="screen-section active">
+        <div class="glass-card login-card">
+            <div class="login-header">
+                <div class="logo-placeholder"></div>
+                <h2>Sisteme Giriş Yapın</h2>
+                <p>Plaka okuma yönetimine erişmek için lütfen kimlik bilgilerinizi giriniz.</p>
+            </div>
+            
+            <form id="login-form">
+                <div class="input-group">
+                    <label for="username">Kullanıcı Adı</label>
+                    <input type="text" id="username" name="username" placeholder="Örn: admin" required autocomplete="username">
+                </div>
+                
+                <div class="input-group">
+                    <label for="password">Şifre</label>
+                    <input type="password" id="password" name="password" placeholder="••••••••" required autocomplete="current-password">
+                </div>
+                
+                <button type="submit" class="btn-primary" id="login-btn">
+                    <span class="btn-text">Giriş Yap</span>
+                    <div class="spinner hidden"></div>
+                </button>
+            </form>
+        </div>
+    </section>
+
+
+    <!-- İşlem Seçim Ekranı (Action Selection Section) -->
+    <section id="action-selection-section" class="screen-section hidden">
+        <div class="glass-card selection-wrapper">
+            <div class="login-header">
+                <h2>İşlem Seçin</h2>
+                <p id="welcome-message">Lütfen yapmak istediğiniz işlemi seçin.</p>
+            </div>
+            
+            <div class="action-buttons-grid">
+                <button id="action-pickup" class="action-big-btn glass-panel pickup-btn">
+                    <div class="action-icon">📥</div>
+                    <h3>Araç Alma</h3>
+                    <p>Müşteriden aracı teslim al</p>
+                </button>
+                
+                <button id="action-dropoff" class="action-big-btn glass-panel dropoff-btn">
+                    <div class="action-icon">📤</div>
+                    <h3>Teslim Etme</h3>
+                    <p>Aracı müşteriye teslim et</p>
+                </button>
+            </div>
+
+            <button id="action-logout-btn" class="btn-secondary" style="margin-top: 30px; width: 100%;">Çıkış Yap</button>
+        </div>
+    </section>
+
+
+    <!-- Ana Dashboard Ekranı (Plaka & Kilometre Adımları) -->
+    <section id="dashboard-section" class="screen-section hidden">
+        <header class="dashboard-header glass-panel">
+            <div class="header-content">
+                <div class="header-left">
+                    <button id="back-to-actions-btn" class="btn-secondary">⬅ Geri</button>
+                    <h1 id="dashboard-title">İşlem...</h1>
+                </div>
+                <div class="step-indicator">
+                    <span id="step-1-dot" class="step-dot active">1</span>
+                    <span class="step-line"></span>
+                    <span id="step-2-dot" class="step-dot">2</span>
+                </div>
+            </div>
+        </header>
+
+        <main class="dashboard-main">
+            <!-- Genel Yönlendirme Metni -->
+            <div class="instruction-banner glass-panel">
+                <div class="icon">ℹ️</div>
+                <p id="instruction-text">Plakayı okutun veya menüden plakayı seçin.</p>
+            </div>
+
+            <!-- Kamera ve Seçim Alanı Container'ı -->
+            <div class="action-container">
+                
+                <!-- Kamera Akışı Alanı -->
+                <div class="camera-card glass-card">
+                    <div class="camera-overlay">
+                        <h3 id="camera-overlay-text">Plakayı okutun</h3>
+                    </div>
+                    
+                    <div class="video-wrapper">
+                        <!-- Kamera beslemesi buraya yansıyacak -->
+                        <video id="camera-stream" autoplay playsinline muted></video>
+                        
+                        <!-- Kamera açılamazsa gösterilecek uyarı -->
+                        <div id="camera-error" class="camera-error hidden">
+                            <span class="error-icon">⚠️</span>
+                            <p id="camera-error-msg">Kamera başlatılamadı.</p>
+                            <button id="retry-camera-btn" class="btn-outline">Tekrar Dene</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Manuel Seçim / Giriş Alanı -->
+                <div class="selection-card glass-card">
+                    <h3 id="manual-title">Manuel Seçim</h3>
+                    <p id="manual-subtitle" class="subtitle">Sisteme kayıtlı plakalardan birini seçebilirsiniz.</p>
+                    
+                    <!-- Adım 1: Plaka Seçimi -->
+                    <div id="step-plate-container" class="input-group">
+                        <label for="plate-select">Kayıtlı Plakalar</label>
+                        <select id="plate-select" name="plate-select">
+                            <option value="" disabled selected>Plaka Seçin...</option>
+                            <!-- Seçenekler JS ile dinamik olarak backend'den doldurulacak -->
+                        </select>
+                    </div>
+
+                    <!-- Adım 2: Kilometre Girişi (Başlangıçta Gizli) -->
+                    <div id="step-mileage-container" class="input-group hidden">
+                        <label for="mileage-input">Kilometre Değeri</label>
+                        <input type="number" id="mileage-input" placeholder="Örn: 145000" min="0" step="1">
+                    </div>
+                    
+                    <button id="process-btn" class="btn-primary" disabled>
+                        <span id="process-btn-text">İşlemi Onayla</span>
+                    </button>
+                </div>
+            </div>
+        </main>
+    </section>
+
+    <!-- Uygulama Mantığı JavaScript Dosyaları -->
+    <script src="/static/js/auth.js"></script>
+    <script src="/static/js/camera.js"></script>
+    <script src="/static/js/main.js"></script>
+
+</body>
+</html>
