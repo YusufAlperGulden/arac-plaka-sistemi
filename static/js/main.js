@@ -1,28 +1,46 @@
 /**
  * main.js
- * SPA mantığıyla ekranlar arası geçişleri ve
- * Multi-Step (İşlem Seçimi -> Plaka -> Kilometre) iş akışını yönetir.
+ * SPA mantığıyla ekranlar arası geçişleri, Raporlama modüllerini
+ * ve backend (API) iletişimini yönetir.
  */
 
 document.addEventListener('DOMContentLoaded', () => {
-    // UI Ekranları
+    // ---- EKRAN BÖLÜMLERİ (SECTIONS) ----
     const loginSection = document.getElementById('login-section');
     const actionSection = document.getElementById('action-selection-section');
     const dashboardSection = document.getElementById('dashboard-section');
+    const reportsMenuSection = document.getElementById('reports-menu-section');
+    const vehicleReportSelectionSection = document.getElementById('vehicle-report-selection-section');
+    const reportDetailSection = document.getElementById('report-detail-section');
     
-    // İşlem Butonları (Araç Alma / Teslim Etme)
+    // ---- İŞLEM SEÇİM EKRANI BUTONLARI ----
     const pickupBtn = document.getElementById('action-pickup');
     const dropoffBtn = document.getElementById('action-dropoff');
+    const reportMenuBtn = document.getElementById('action-report-btn');
     const actionLogoutBtn = document.getElementById('action-logout-btn');
     
-    // Dashboard Header ve Indicator
+    // ---- RAPORLAR MENÜSÜ BUTONLARI ----
+    const reportRecentBtn = document.getElementById('report-recent-btn');
+    const reportVehicleBtn = document.getElementById('report-vehicle-btn');
+    const backFromReportsMenuBtn = document.getElementById('back-from-reports-menu-btn');
+
+    // ---- ARAÇ BAZLI RAPOR SEÇİM EKRANI ----
+    const reportPlateSelect = document.getElementById('report-plate-select');
+    const viewVehicleReportBtn = document.getElementById('view-vehicle-report-btn');
+    const backFromVehicleSelectBtn = document.getElementById('back-from-vehicle-select-btn');
+    
+    // ---- RAPOR DETAY EKRANI ----
+    const backToReportsMenuBtn = document.getElementById('back-to-reports-menu-btn');
+    const reportTableBody = document.getElementById('report-table-body');
+    const reportTitle = document.getElementById('report-title');
+    
+    // ---- DASHBOARD (İŞLEM) EKRANI UI ELEMENTLERİ ----
     const dashboardTitle = document.getElementById('dashboard-title');
     const backToActionsBtn = document.getElementById('back-to-actions-btn');
     const step1Dot = document.getElementById('step-1-dot');
     const step2Dot = document.getElementById('step-2-dot');
     const instructionText = document.getElementById('instruction-text');
     
-    // Kamera ve İçerik Yönetimi
     const cameraOverlayText = document.getElementById('camera-overlay-text');
     const stepPlateContainer = document.getElementById('step-plate-container');
     const stepMileageContainer = document.getElementById('step-mileage-container');
@@ -45,26 +63,13 @@ document.addEventListener('DOMContentLoaded', () => {
         mileage: null
     };
 
-    // Global: Giriş sonrası tetiklenir (auth.js tarafından çağırılır)
-    window.switchToDashboard = function(username) {
-        state.username = username;
-        
-        loginSection.classList.remove('active');
-        loginSection.classList.add('hidden');
-        
-        showActionSelection();
-    };
-
-    // İşlem Seçimi Ekranını Göster
-    function showActionSelection() {
-        dashboardSection.classList.remove('active');
-        dashboardSection.classList.add('hidden');
-        
-        actionSection.classList.remove('hidden');
-        actionSection.classList.add('active');
-        
-        // Hoşgeldin mesajını isme göre güncelle
-        document.getElementById('welcome-message').textContent = `Hoş geldin ${state.username}, lütfen yapmak istediğiniz işlemi seçin.`;
+    // Tüm ekranları gizleme yardımcı fonksiyonu
+    function hideAllSections() {
+        const sections = document.querySelectorAll('.screen-section');
+        sections.forEach(sec => {
+            sec.classList.remove('active');
+            sec.classList.add('hidden');
+        });
         
         // Kamera açıksa kapat
         if (window.cameraController) {
@@ -72,25 +77,27 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // Araç Alma Butonu
-    pickupBtn.addEventListener('click', () => {
-        startProcess('Araç Alma', 'pickup');
-    });
-
-    // Teslim Etme Butonu
-    dropoffBtn.addEventListener('click', () => {
-        startProcess('Teslim Etme', 'dropoff');
-    });
-
-    // Geri Dön Butonu (Dashboard -> Action Selection)
-    backToActionsBtn.addEventListener('click', () => {
+    // Global: Giriş sonrası tetiklenir (auth.js)
+    window.switchToDashboard = function(username) {
+        state.username = username;
         showActionSelection();
-    });
+    };
 
-    // Çıkış Butonu (Action Selection Ekranında)
+    // İşlem Seçimi Ekranını Göster
+    function showActionSelection() {
+        hideAllSections();
+        actionSection.classList.remove('hidden');
+        actionSection.classList.add('active');
+        
+        document.getElementById('welcome-message').textContent = `Hoş geldin ${state.username}, lütfen yapmak istediğiniz işlemi seçin.`;
+    }
+
+    // ---- DASHBOARD / İŞLEM (KAMERA) AKIŞI ----
+    pickupBtn.addEventListener('click', () => startProcess('Araç Alma', 'pickup'));
+    dropoffBtn.addEventListener('click', () => startProcess('Teslim Etme', 'dropoff'));
+    backToActionsBtn.addEventListener('click', showActionSelection);
     actionLogoutBtn.addEventListener('click', logout);
 
-    // Süreci Başlat
     function startProcess(title, actionType) {
         state.currentAction = actionType;
         state.currentStep = 1;
@@ -99,28 +106,20 @@ document.addEventListener('DOMContentLoaded', () => {
         
         dashboardTitle.textContent = title;
         
-        actionSection.classList.remove('active');
-        actionSection.classList.add('hidden');
-        
+        hideAllSections();
         dashboardSection.classList.remove('hidden');
         dashboardSection.classList.add('active');
         
-        // Backend'den kayıtlı plakaları çek
-        loadPlates();
-        
-        // 1. Adımı render et
+        loadPlatesForDashboard();
         renderStep();
         
-        // Kamerayı başlat
         if (window.cameraController) {
             window.cameraController.startCamera();
         }
     }
 
-    // Bulunulan Adıma (Step) Göre UI'ı Güncelle
     function renderStep() {
         if (state.currentStep === 1) {
-            // ADIM 1: PLAKA OKUMA
             step1Dot.classList.add('active');
             step1Dot.classList.remove('completed');
             step2Dot.classList.remove('active');
@@ -135,12 +134,9 @@ document.addEventListener('DOMContentLoaded', () => {
             stepMileageContainer.classList.add('hidden');
             
             processBtnText.textContent = 'İleri: Kilometre';
-            
-            // Seçili plaka yoksa butonu disable yap
             processBtn.disabled = plateSelect.value === "";
             
         } else if (state.currentStep === 2) {
-            // ADIM 2: KİLOMETRE GİRİŞİ
             step1Dot.classList.remove('active');
             step1Dot.classList.add('completed');
             step2Dot.classList.add('active');
@@ -155,97 +151,206 @@ document.addEventListener('DOMContentLoaded', () => {
             stepMileageContainer.classList.remove('hidden');
             
             processBtnText.textContent = 'İşlemi Tamamla';
-            
-            // Kilometre boşsa butonu disable yap
             processBtn.disabled = mileageInput.value === "";
         }
     }
 
-    // Input Değişiklikleri
     plateSelect.addEventListener('change', (e) => {
-        if (state.currentStep === 1) {
-            processBtn.disabled = (e.target.value === "");
-        }
+        if (state.currentStep === 1) processBtn.disabled = (e.target.value === "");
     });
 
     mileageInput.addEventListener('input', (e) => {
-        if (state.currentStep === 2) {
-            processBtn.disabled = (e.target.value.trim() === "");
-        }
+        if (state.currentStep === 2) processBtn.disabled = (e.target.value.trim() === "");
     });
 
-    // Ortak "İleri / Tamamla" Butonu
-    processBtn.addEventListener('click', () => {
+    // İŞLEM ONAYI VE BACKEND'E KAYIT (POST)
+    processBtn.addEventListener('click', async () => {
         if (state.currentStep === 1) {
-            // Plaka adımından Kilometre adımına geçiş
             state.plate = plateSelect.value;
             window.showToast('Plaka onaylandı. Lütfen kilometreyi girin.', 'success');
-            
             state.currentStep = 2;
             renderStep();
             
         } else if (state.currentStep === 2) {
-            // İşlemi Bitirme
             state.mileage = mileageInput.value.trim();
-            
             const actionStr = state.currentAction === 'pickup' ? 'Araç Alma' : 'Teslim Etme';
-            window.showToast(`${actionStr} işlemi başarıyla tamamlandı!<br>Plaka: ${state.plate} | KM: ${state.mileage}`, 'success');
             
-            // Inputu temizle ve ana menüye dön
-            mileageInput.value = '';
-            plateSelect.value = '';
-            
-            setTimeout(() => {
-                showActionSelection();
-            }, 2500); // Kullanıcı mesajı görsün diye hafif bekleme
+            // Backend'e kaydet
+            try {
+                processBtn.disabled = true;
+                const response = await fetch('/api/record', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        plate: state.plate,
+                        action: actionStr,
+                        mileage: state.mileage,
+                        user: state.username
+                    })
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok && result.success) {
+                    window.showToast(`${actionStr} başarıyla kaydedildi!<br>Plaka: ${state.plate} | KM: ${state.mileage}`, 'success');
+                } else {
+                    window.showToast(result.message || 'Kayıt sırasında hata oluştu.', 'error');
+                }
+            } catch (error) {
+                console.error("Kayıt hatası:", error);
+                window.showToast('Sunucu ile iletişim kurulamadı.', 'error');
+            } finally {
+                mileageInput.value = '';
+                plateSelect.value = '';
+                processBtn.disabled = false;
+                
+                setTimeout(() => showActionSelection(), 2500);
+            }
         }
     });
 
-    // API: Plakaları Getir
-    async function loadPlates() {
+
+    // ---- RAPORLAR MENÜSÜ AKIŞI ----
+    
+    // Raporlar Menüsünü Aç
+    reportMenuBtn.addEventListener('click', () => {
+        hideAllSections();
+        reportsMenuSection.classList.remove('hidden');
+        reportsMenuSection.classList.add('active');
+    });
+
+    // Menüden Geri Dön
+    backFromReportsMenuBtn.addEventListener('click', showActionSelection);
+
+    // 1- Son Hareket Raporu
+    reportRecentBtn.addEventListener('click', () => {
+        reportTitle.textContent = "Son Hareket Raporu";
+        fetchAndShowReport('/api/reports/recent');
+    });
+
+    // 2- Araç Bazlı Rapor Seçim Ekranını Aç
+    reportVehicleBtn.addEventListener('click', () => {
+        hideAllSections();
+        vehicleReportSelectionSection.classList.remove('hidden');
+        vehicleReportSelectionSection.classList.add('active');
+        
+        loadPlatesForReport(); // Plakaları dropdown'a doldur
+    });
+    
+    backFromVehicleSelectBtn.addEventListener('click', () => {
+        hideAllSections();
+        reportsMenuSection.classList.remove('hidden');
+        reportsMenuSection.classList.add('active');
+    });
+    
+    reportPlateSelect.addEventListener('change', (e) => {
+        viewVehicleReportBtn.disabled = (e.target.value === "");
+    });
+    
+    // Araç Raporunu Görüntüle Butonu
+    viewVehicleReportBtn.addEventListener('click', () => {
+        const selectedPlate = reportPlateSelect.value;
+        if(selectedPlate) {
+            reportTitle.textContent = `Araç Raporu: ${selectedPlate}`;
+            fetchAndShowReport(`/api/reports/plate/${encodeURIComponent(selectedPlate)}`);
+        }
+    });
+
+    // Rapor Detayından Geri Dön
+    backToReportsMenuBtn.addEventListener('click', () => {
+        hideAllSections();
+        reportsMenuSection.classList.remove('hidden');
+        reportsMenuSection.classList.add('active');
+    });
+
+    // Raporu Backend'den Çek ve Tabloya Bas
+    async function fetchAndShowReport(apiUrl) {
+        hideAllSections();
+        reportDetailSection.classList.remove('hidden');
+        reportDetailSection.classList.add('active');
+        
+        reportTableBody.innerHTML = '<tr><td colspan="5" style="text-align:center;">Yükleniyor...</td></tr>';
+        
         try {
-            const response = await fetch('/api/plates');
+            const response = await fetch(apiUrl);
             const result = await response.json();
             
             if (response.ok && result.success) {
-                populateDropdown(result.plates);
+                renderTable(result.records);
             } else {
-                window.showToast('Kayıtlı plakalar getirilemedi.', 'error');
+                reportTableBody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:#ef4444;">Veriler alınamadı.</td></tr>';
+                window.showToast('Raporlar alınamadı.', 'error');
             }
         } catch (error) {
-            window.showToast('Sunucu bağlantı hatası.', 'error');
+            console.error("Rapor API hatası:", error);
+            reportTableBody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:#ef4444;">Sunucu bağlantı hatası.</td></tr>';
+            window.showToast('Sunucu ile iletişim kurulamadı.', 'error');
         }
     }
 
-    function populateDropdown(plates) {
-        plateSelect.innerHTML = '<option value="" disabled selected>Plaka Seçin...</option>';
-        plates.forEach(plate => {
-            const option = document.createElement('option');
-            option.value = plate;
-            option.textContent = plate;
-            plateSelect.appendChild(option);
+    function renderTable(records) {
+        reportTableBody.innerHTML = '';
+        
+        if (records.length === 0) {
+            reportTableBody.innerHTML = '<tr><td colspan="5" style="text-align:center;">Henüz bir kayıt bulunmuyor.</td></tr>';
+            return;
+        }
+        
+        records.forEach(record => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td>${record.timestamp}</td>
+                <td><strong>${record.plate}</strong></td>
+                <td>${record.action}</td>
+                <td>${record.mileage} KM</td>
+                <td>${record.user}</td>
+            `;
+            reportTableBody.appendChild(tr);
         });
-        
-        // Eğer geri dönülmüşse eski seçimi koru
-        if (state.plate) {
-            plateSelect.value = state.plate;
-        }
     }
 
-    // Çıkış Yapma Fonksiyonu
-    function logout() {
-        if (window.cameraController) {
-            window.cameraController.stopCamera();
+    // ---- API YARDIMCI FONKSİYONLAR (PLAKALARI GETİRME) ----
+    
+    async function fetchPlatesAPI() {
+        try {
+            const response = await fetch('/api/plates');
+            const result = await response.json();
+            if (response.ok && result.success) {
+                return result.plates;
+            }
+        } catch (error) {
+            console.error("Plaka API hatası:", error);
         }
-        
+        return [];
+    }
+
+    async function loadPlatesForDashboard() {
+        const plates = await fetchPlatesAPI();
+        plateSelect.innerHTML = '<option value="" disabled selected>Plaka Seçin...</option>';
+        plates.forEach(p => {
+            const opt = document.createElement('option');
+            opt.value = p; opt.textContent = p;
+            plateSelect.appendChild(opt);
+        });
+        if (state.plate) plateSelect.value = state.plate;
+    }
+
+    async function loadPlatesForReport() {
+        const plates = await fetchPlatesAPI();
+        reportPlateSelect.innerHTML = '<option value="" disabled selected>Plaka Seçin...</option>';
+        plates.forEach(p => {
+            const opt = document.createElement('option');
+            opt.value = p; opt.textContent = p;
+            reportPlateSelect.appendChild(opt);
+        });
+        viewVehicleReportBtn.disabled = true;
+    }
+
+    // Çıkış Yapma
+    function logout() {
+        hideAllSections();
         state = { username: null, currentAction: null, currentStep: 1, plate: null, mileage: null };
-        
         document.getElementById('login-form').reset();
-        
-        actionSection.classList.remove('active');
-        actionSection.classList.add('hidden');
-        dashboardSection.classList.remove('active');
-        dashboardSection.classList.add('hidden');
         
         loginSection.classList.remove('hidden');
         loginSection.classList.add('active');

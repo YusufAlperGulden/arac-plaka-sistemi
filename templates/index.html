@@ -67,7 +67,96 @@
                 </button>
             </div>
 
+            <!-- Yeni Yönetim / Rapor Butonu -->
+            <button id="action-report-btn" class="btn-outline" style="width: 100%; margin-top: 20px; padding: 15px; font-weight: 600;">
+                📊 Yönetim / Rapor
+            </button>
+
+            <!-- Çıkış Butonu En Alta Taşındı -->
             <button id="action-logout-btn" class="btn-secondary" style="margin-top: 30px; width: 100%;">Çıkış Yap</button>
+        </div>
+    </section>
+
+    
+    <!-- Yönetim / Rapor Menüsü Ekranı -->
+    <section id="reports-menu-section" class="screen-section hidden">
+        <div class="glass-card selection-wrapper">
+            <div class="login-header">
+                <h2>Raporlar</h2>
+                <p>Görüntülemek istediğiniz raporu seçin.</p>
+            </div>
+            
+            <div class="action-buttons-grid">
+                <button id="report-recent-btn" class="action-big-btn glass-panel">
+                    <div class="action-icon">🕒</div>
+                    <h3>Son Hareket Raporu</h3>
+                    <p>En yeniden en eskiye işlem kayıtları</p>
+                </button>
+                
+                <button id="report-vehicle-btn" class="action-big-btn glass-panel">
+                    <div class="action-icon">🚗</div>
+                    <h3>Araç Bazlı Rapor</h3>
+                    <p>Plakaya göre geçmiş hareketler</p>
+                </button>
+            </div>
+
+            <button id="back-from-reports-menu-btn" class="btn-secondary" style="margin-top: 30px; width: 100%;">⬅ Geri Dön</button>
+        </div>
+    </section>
+
+    
+    <!-- Araç Bazlı Rapor - Plaka Seçim Ekranı -->
+    <section id="vehicle-report-selection-section" class="screen-section hidden">
+        <div class="glass-card selection-wrapper">
+            <div class="login-header">
+                <h2>Araç Seçimi</h2>
+                <p>Raporunu görmek istediğiniz aracı seçin.</p>
+            </div>
+            
+            <div class="input-group">
+                <label for="report-plate-select">Sisteme Kayıtlı Plakalar</label>
+                <select id="report-plate-select" name="report-plate-select">
+                    <option value="" disabled selected>Plaka Seçin...</option>
+                    <!-- Seçenekler JS ile dinamik olarak backend'den doldurulacak -->
+                </select>
+            </div>
+            
+            <button id="view-vehicle-report-btn" class="btn-primary" disabled style="margin-top: 15px;">
+                Raporu Görüntüle
+            </button>
+
+            <button id="back-from-vehicle-select-btn" class="btn-secondary" style="margin-top: 20px; width: 100%;">⬅ Geri Dön</button>
+        </div>
+    </section>
+
+
+    <!-- Rapor Detay Ekranı (Tablo) -->
+    <section id="report-detail-section" class="screen-section hidden">
+        <div class="glass-card report-wrapper" style="width: 100%; max-width: 900px;">
+            <div class="header-content" style="margin-bottom: 20px;">
+                <div class="header-left">
+                    <button id="back-to-reports-menu-btn" class="btn-secondary">⬅ Geri</button>
+                    <h1 id="report-title">Rapor</h1>
+                </div>
+            </div>
+            
+            <div class="table-container">
+                <table class="modern-table">
+                    <thead>
+                        <tr>
+                            <th>Tarih / Saat</th>
+                            <th>Plaka</th>
+                            <th>İşlem Tipi</th>
+                            <th>Kilometre</th>
+                            <th>Kullanan Kişi</th>
+                        </tr>
+                    </thead>
+                    <tbody id="report-table-body">
+                        <!-- Kayıtlar JS ile buraya yüklenecek -->
+                        <tr><td colspan="5" style="text-align:center;">Yükleniyor...</td></tr>
+                    </tbody>
+                </table>
+            </div>
         </div>
     </section>
 

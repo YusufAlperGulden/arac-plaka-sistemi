@@ -100,7 +100,7 @@ body {
     animation: fadeIn 0.5s ease-in-out;
 }
 
-#dashboard-section {
+#dashboard-section, #report-detail-section {
     flex-direction: column;
     justify-content: flex-start;
 }
@@ -160,7 +160,7 @@ body {
     font-size: 0.9rem;
 }
 
-/* --- İŞLEM SEÇİM EKRANI (ACTION SELECTION) --- */
+/* --- İŞLEM SEÇİM & RAPOR MENÜSÜ EKRANI --- */
 .selection-wrapper {
     width: 100%;
     max-width: 600px;
@@ -184,7 +184,7 @@ body {
     transition: all var(--transition-speed);
 }
 
-.action-big-btn:hover {
+.action-big-btn:hover:not(:disabled) {
     background: rgba(59, 130, 246, 0.15);
     border-color: var(--accent-color);
     transform: translateY(-5px);
@@ -276,7 +276,7 @@ button {
     font-weight: 500;
 }
 
-.btn-primary:hover {
+.btn-primary:hover:not(:disabled) {
     background-color: var(--accent-hover);
     transform: translateY(-1px);
 }
@@ -323,6 +323,45 @@ button {
 }
 @keyframes spin {
     to { transform: rotate(360deg); }
+}
+
+/* --- RAPOR TABLOLARI --- */
+.report-wrapper {
+    margin: 20px auto;
+    padding: 30px;
+}
+.table-container {
+    width: 100%;
+    overflow-x: auto;
+    border-radius: 12px;
+    border: 1px solid var(--glass-border);
+}
+.modern-table {
+    width: 100%;
+    border-collapse: collapse;
+    background: rgba(15, 23, 42, 0.4);
+    text-align: left;
+}
+.modern-table th, .modern-table td {
+    padding: 15px 20px;
+    border-bottom: 1px solid var(--glass-border);
+}
+.modern-table th {
+    background: rgba(15, 23, 42, 0.8);
+    color: var(--text-secondary);
+    font-weight: 600;
+    font-size: 0.9rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+.modern-table tbody tr {
+    transition: background var(--transition-speed);
+}
+.modern-table tbody tr:hover {
+    background: rgba(59, 130, 246, 0.1);
+}
+.modern-table tbody tr:last-child td {
+    border-bottom: none;
 }
 
 /* --- ANA EKRAN (DASHBOARD) --- */
