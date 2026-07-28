@@ -373,7 +373,8 @@ button {
 }
 
 .header-content {
-    max-width: 1500px;
+    width: 95%;
+    max-width: 1800px;
     margin: 0 auto;
     display: flex;
     justify-content: space-between;
@@ -429,8 +430,8 @@ button {
 }
 
 .dashboard-main {
-    width: 100%;
-    max-width: 1500px;
+    width: 95%;
+    max-width: 1800px;
     margin: 0 auto;
     padding: 20px;
     display: flex;
