@@ -120,51 +120,83 @@ document.addEventListener('DOMContentLoaded', () => {
         renderStep();
         
         if (window.cameraController) {
+        if (window.cameraController) {
             window.cameraController.startCamera();
-            startOcrLoop();
         }
     }
     
-    let ocrInterval = null;
-    
-    function stopOcrLoop() {
-        if (ocrInterval) {
-            clearInterval(ocrInterval);
-            ocrInterval = null;
+    let ocrWorker = null;
+    let isOcrProcessing = false;
+
+    // Tesseract Worker'ı sadece 1 kere oluştur (Persistent)
+    async function initOcrWorker() {
+        if (!ocrWorker && typeof Tesseract !== 'undefined') {
+            ocrWorker = await Tesseract.createWorker('eng', 1, {
+                logger: m => {} // Logları kapattık (performans için)
+            });
+            await ocrWorker.setParameters({
+                tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 ',
+                preserve_interword_spaces: '1'
+            });
+            console.log("Tesseract Worker hazır.");
         }
     }
     
-    function startOcrLoop() {
-        stopOcrLoop();
-        // Sadece Tesseract.js yüklüyse ve adım 1 ise çalıştır
-        if (typeof Tesseract === 'undefined') return;
-        
-        ocrInterval = setInterval(async () => {
-            if (state.currentStep !== 1 || !window.cameraController || !window.cameraController.videoElement || window.cameraController.videoElement.readyState !== 4) {
-                return; // Video henüz hazır değil veya yanlış adım
+    // Uygulama yüklenirken worker'ı başlat
+    initOcrWorker();
+
+    const triggerOcrBtn = document.getElementById('trigger-ocr-btn');
+    if (triggerOcrBtn) {
+        triggerOcrBtn.addEventListener('click', async () => {
+            if (isOcrProcessing || !ocrWorker || !window.cameraController || !window.cameraController.videoElement || window.cameraController.videoElement.readyState !== 4) {
+                window.showToast("Kamera veya OCR motoru henüz hazır değil.", "error");
+                return;
             }
             
-            const video = window.cameraController.videoElement;
-            const canvas = document.createElement('canvas');
-            canvas.width = video.videoWidth;
-            canvas.height = video.videoHeight;
-            const ctx = canvas.getContext('2d');
-            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-            
+            isOcrProcessing = true;
+            const originalText = triggerOcrBtn.innerHTML;
+            triggerOcrBtn.innerHTML = '⏳ İşleniyor...';
+            triggerOcrBtn.disabled = true;
+
             try {
-                // Hızlı tarama için logları kapat ve İngilizce (genel harf/rakam) modelini kullan
-                const result = await Tesseract.recognize(canvas, 'eng', { logger: m => {} });
+                const video = window.cameraController.videoElement;
+                
+                // 1. ROI Kırpma (Ekranda gösterilen çerçeve ile orantılı)
+                // Çerçeve %70 genişlikte ve %35 yükseklikte ortalanmış.
+                const cropWidth = video.videoWidth * 0.7;
+                const cropHeight = video.videoHeight * 0.35;
+                const cropX = (video.videoWidth - cropWidth) / 2;
+                const cropY = (video.videoHeight - cropHeight) / 2;
+                
+                const canvas = document.createElement('canvas');
+                canvas.width = cropWidth;
+                canvas.height = cropHeight;
+                const ctx = canvas.getContext('2d');
+                
+                ctx.drawImage(video, cropX, cropY, cropWidth, cropHeight, 0, 0, cropWidth, cropHeight);
+                
+                // 2. Ön işleme (Grayscale ve Basit Threshold)
+                const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                const data = imageData.data;
+                for (let i = 0; i < data.length; i += 4) {
+                    const gray = 0.299 * data[i] + 0.587 * data[i+1] + 0.114 * data[i+2];
+                    const thresholdValue = gray > 110 ? 255 : 0; // Koyu kısımları siyah, açık kısımları beyaz yap
+                    data[i] = data[i+1] = data[i+2] = thresholdValue;
+                }
+                ctx.putImageData(imageData, 0, 0);
+                
+                // 3. OCR (Sadece kırpılmış ve işlenmiş ROI alanı)
+                const result = await ocrWorker.recognize(canvas);
                 const text = result.data.text;
                 
-                // Plaka formatı arama: Örn 34 ABC 12 veya 34ABC123
-                // Boşluklu veya boşluksuz 2 rakam, 1-3 harf, 2-4 rakam
-                const plateRegex = /([0-9]{2})\s*([A-Z]{1,3})\s*([0-9]{2,4})/gi;
+                // 4. Regex ile Plaka Ayıklama
+                const plateRegex = /([0-9]{2})\s*([A-Z]{1,3})\s*([0-9]{2,4})/i;
                 const match = plateRegex.exec(text);
                 
                 if (match) {
                     const detectedPlate = (match[1] + match[2] + match[3]).toUpperCase();
                     
-                    // Bulunan plaka sistemde (dropdown'da) kayıtlı mı?
+                    // 5. Doğrulama ve UI Doldurma
                     let found = false;
                     for (let i = 0; i < plateSelect.options.length; i++) {
                         if (plateSelect.options[i].value === detectedPlate) {
@@ -175,22 +207,24 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                     
                     if (found) {
-                        window.showToast(`Plaka Algılandı: ${detectedPlate}`, 'success');
+                        window.showToast(`Plaka Bulundu: ${detectedPlate}`, 'success');
                         processBtn.disabled = false;
-                        stopOcrLoop(); // Döngüyü durdur
-                        
-                        // Görsel efekt (Yeşil parlama)
-                        const overlay = document.getElementById('camera-overlay');
-                        if(overlay) {
-                            overlay.style.background = 'rgba(34, 197, 94, 0.5)';
-                            setTimeout(() => { overlay.style.background = 'none'; }, 1000);
-                        }
+                        window.cameraController.stopCamera(); // Bulunduğu için kamerayı kapat
+                    } else {
+                        window.showToast(`Plaka (${detectedPlate}) okundu ancak sistemde kayıtlı değil.`, 'error');
                     }
+                } else {
+                    window.showToast('Plaka net okunamadı. Çerçeveye tam oturtup tekrar deneyin.', 'error');
                 }
             } catch (err) {
-                console.error("OCR Tarama Hatası:", err);
+                console.error("OCR Hatası:", err);
+                window.showToast('Okuma işlemi sırasında hata oluştu.', 'error');
+            } finally {
+                isOcrProcessing = false;
+                triggerOcrBtn.innerHTML = originalText;
+                triggerOcrBtn.disabled = false;
             }
-        }, 2000); // 2 saniyede bir kare analizi yap (sunucuyu/tarayıcıyı yormamak için)
+        });
     }
 
     function renderStep() {

@@ -244,9 +244,14 @@
                         <h3 id="camera-overlay-text">Plakayı okutun</h3>
                     </div>
                     
-                    <div class="video-wrapper">
+                    <div class="video-wrapper" style="position: relative;">
                         <!-- Kamera beslemesi buraya yansıyacak -->
                         <video id="camera-stream" autoplay playsinline muted></video>
+                        
+                        <!-- ROI (Region of Interest) Çerçevesi -->
+                        <div id="ocr-roi-box" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 70%; height: 35%; border: 3px dashed #3b82f6; border-radius: 8px; box-shadow: 0 0 0 9999px rgba(0,0,0,0.6); pointer-events: none; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; padding-bottom: 10px;">
+                            <span style="color: white; font-size: 0.85rem; font-weight: bold; background: rgba(0,0,0,0.7); padding: 4px 8px; border-radius: 4px; text-shadow: 1px 1px 2px black;">Plakayı buraya sığdırın</span>
+                        </div>
                         
                         <!-- Kamera açılamazsa gösterilecek uyarı -->
                         <div id="camera-error" class="camera-error hidden">
@@ -254,6 +259,12 @@
                             <p id="camera-error-msg">Kamera başlatılamadı.</p>
                             <button id="retry-camera-btn" class="btn-outline">Tekrar Dene</button>
                         </div>
+                    </div>
+                    <!-- OCR Manuel Tetikleme Butonu -->
+                    <div style="margin-top: 15px;">
+                        <button id="trigger-ocr-btn" class="btn-primary" style="width: 100%; padding: 12px; font-size: 1.1rem; display: flex; justify-content: center; align-items: center; gap: 10px;">
+                            📷 Plakayı Oku
+                        </button>
                     </div>
                 </div>
 
