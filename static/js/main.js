@@ -231,7 +231,7 @@ document.addEventListener('DOMContentLoaded', () => {
     backFromReportsMenuBtn.addEventListener('click', showActionSelection);
 
     reportRecentBtn.addEventListener('click', () => {
-        reportTitle.textContent = "Son Hareket Raporu";
+        reportTitle.textContent = "🕒 Son Hareket Raporu";
         fetchAndShowReport('/api/reports/recent');
     });
 
