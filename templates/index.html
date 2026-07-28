@@ -3,43 +3,61 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Plaka Okuma ve Yönetim Sistemi</title>
+    <title>Araç Plaka Yönetim Sistemi</title>
     <!-- Google Fonts üzerinden modern font (Inter) dahil ediliyor -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <!-- Özel CSS dosyamız -->
     <link rel="stylesheet" href="/static/css/style.css">
 </head>
 <body>
 
+    <!-- Üst İkon Barı -->
+    <div class="top-icon-bar">
+        <button class="icon-btn" title="Tema Rengi">🎨</button>
+        <button class="icon-btn" title="Aydınlık/Karanlık Mod">☀️</button>
+        <button class="icon-btn" title="Saat">🕒</button>
+    </div>
+
     <!-- Bildirim (Toast) Mesajları Alanı -->
     <div id="toast-container"></div>
+
+    <!-- Ana Arka Plan Başlığı (Login ekranı için) -->
+    <div class="main-title-container" id="main-title-container">
+        <h1>Araç Plaka Yönetim Sistemi</h1>
+        <p>Araç ve plaka işlemlerinizi güvenle yönetin ve doğrulayın.</p>
+    </div>
 
     <!-- Giriş Ekranı (Login Section) -->
     <section id="login-section" class="screen-section active">
         <div class="glass-card login-card">
             <div class="login-header">
-                <div class="logo-placeholder"></div>
-                <h2>Sisteme Giriş Yapın</h2>
-                <p>Plaka okuma yönetimine erişmek için lütfen kimlik bilgilerinizi giriniz.</p>
+                <h2>Güvenli Giriş</h2>
             </div>
             
             <form id="login-form">
                 <div class="input-group">
                     <label for="username">Kullanıcı Adı</label>
-                    <input type="text" id="username" name="username" placeholder="Örn: admin" required autocomplete="username">
+                    <input type="text" id="username" name="username" placeholder="" required autocomplete="username">
                 </div>
                 
                 <div class="input-group">
-                    <label for="password">Şifre</label>
+                    <label for="password">Uygulama Şifresi</label>
                     <input type="password" id="password" name="password" placeholder="••••••••" required autocomplete="current-password">
                 </div>
                 
-                <button type="submit" class="btn-primary" id="login-btn">
-                    <span class="btn-text">Giriş Yap</span>
-                    <div class="spinner hidden"></div>
-                </button>
+                <!-- CAPSLOCK Uyarısı -->
+                <div id="caps-warning" class="caps-warning hidden">
+                    ⚠️ CAPSLOCK: AÇIK
+                </div>
+                
+                <div class="login-btn-container">
+                    <button type="submit" class="btn-primary login-btn-blue" id="login-btn">
+                        <span class="btn-text">Giriş Yap</span>
+                        <div class="spinner hidden"></div>
+                    </button>
+                </div>
             </form>
         </div>
     </section>
@@ -50,7 +68,7 @@
         <div class="glass-card selection-wrapper">
             <div class="login-header">
                 <h2>İşlem Seçin</h2>
-                <p id="welcome-message">Lütfen yapmak istediğiniz işlemi seçin.</p>
+                <p id="welcome-message" style="color: var(--text-secondary);">Lütfen yapmak istediğiniz işlemi seçin.</p>
             </div>
             
             <div class="action-buttons-grid">
@@ -83,7 +101,7 @@
         <div class="glass-card selection-wrapper">
             <div class="login-header">
                 <h2>Raporlar</h2>
-                <p>Görüntülemek istediğiniz raporu seçin.</p>
+                <p style="color: var(--text-secondary);">Görüntülemek istediğiniz raporu seçin.</p>
             </div>
             
             <div class="action-buttons-grid">
@@ -110,7 +128,7 @@
         <div class="glass-card selection-wrapper">
             <div class="login-header">
                 <h2>Araç Seçimi</h2>
-                <p>Raporunu görmek istediğiniz aracı seçin.</p>
+                <p style="color: var(--text-secondary);">Raporunu görmek istediğiniz aracı seçin.</p>
             </div>
             
             <div class="input-group">
@@ -140,20 +158,26 @@
                 </div>
             </div>
             
-            <div class="table-container">
+            <div class="table-container" style="overflow-x: auto; white-space: nowrap;">
                 <table class="modern-table">
                     <thead>
                         <tr>
-                            <th>Tarih / Saat</th>
+                            <th>Araç Hareket Tipi</th>
+                            <th>Ekleme Tarihi</th>
+                            <th>Araç İsmi</th>
                             <th>Plaka</th>
-                            <th>İşlem Tipi</th>
-                            <th>Kilometre</th>
-                            <th>Kullanan Kişi</th>
+                            <th>Sürücü Adı</th>
+                            <th>İlk Sayaç</th>
+                            <th>Son Sayaç</th>
+                            <th>Başlangıç Tarihi</th>
+                            <th>Yapılan Mesafe (km)</th>
+                            <th>Bitiş Tarihi</th>
+                            <th>Açıklama (not)</th>
                         </tr>
                     </thead>
                     <tbody id="report-table-body">
                         <!-- Kayıtlar JS ile buraya yüklenecek -->
-                        <tr><td colspan="5" style="text-align:center;">Yükleniyor...</td></tr>
+                        <tr><td colspan="11" style="text-align:center;">Yükleniyor...</td></tr>
                     </tbody>
                 </table>
             </div>
@@ -218,15 +242,26 @@
                             <option value="" disabled selected>Plaka Seçin...</option>
                             <!-- Seçenekler JS ile dinamik olarak backend'den doldurulacak -->
                         </select>
+
+                        <label for="action-type-select" style="margin-top: 15px;">Araç Hareket Tipi</label>
+                        <select id="action-type-select" name="action-type-select">
+                            <option value="Diğer" selected>Diğer</option>
+                            <option value="Periyodik Bakım">Periyodik Bakım</option>
+                            <option value="Kurum İçi Operasyon">Kurum İçi Operasyon</option>
+                            <option value="Müşteri Teslimatı">Müşteri Teslimatı</option>
+                        </select>
                     </div>
 
                     <!-- Adım 2: Kilometre Girişi (Başlangıçta Gizli) -->
                     <div id="step-mileage-container" class="input-group hidden">
                         <label for="mileage-input">Kilometre Değeri</label>
                         <input type="number" id="mileage-input" placeholder="Örn: 145000" min="0" step="1">
+
+                        <label for="notes-input" style="margin-top: 15px;">Açıklama (Not)</label>
+                        <input type="text" id="notes-input" placeholder="İsteğe bağlı not giriniz...">
                     </div>
                     
-                    <button id="process-btn" class="btn-primary" disabled>
+                    <button id="process-btn" class="btn-primary" disabled style="margin-top: 15px;">
                         <span id="process-btn-text">İşlemi Onayla</span>
                     </button>
                 </div>
@@ -239,5 +274,25 @@
     <script src="/static/js/camera.js"></script>
     <script src="/static/js/main.js"></script>
 
+    <script>
+        // Sayfa değiştiğinde ana başlığı (Fatura İşleme Sistemi benzeri) gizle/göster
+        document.addEventListener('DOMContentLoaded', () => {
+            const loginSection = document.getElementById('login-section');
+            const mainTitle = document.getElementById('main-title-container');
+            
+            // Eğer giriş sayfasındaysak başlığı göster, değilse gizle
+            const observer = new MutationObserver((mutations) => {
+                mutations.forEach((mutation) => {
+                    if (mutation.target.classList.contains('active')) {
+                        mainTitle.style.display = 'block';
+                    } else {
+                        mainTitle.style.display = 'none';
+                    }
+                });
+            });
+            
+            observer.observe(loginSection, { attributes: true, attributeFilter: ['class'] });
+        });
+    </script>
 </body>
 </html>

@@ -49,7 +49,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const manualSubtitle = document.getElementById('manual-subtitle');
     
     const plateSelect = document.getElementById('plate-select');
+    const actionTypeSelect = document.getElementById('action-type-select');
     const mileageInput = document.getElementById('mileage-input');
+    const notesInput = document.getElementById('notes-input');
     
     const processBtn = document.getElementById('process-btn');
     const processBtnText = document.getElementById('process-btn-text');
@@ -60,7 +62,9 @@ document.addEventListener('DOMContentLoaded', () => {
         currentAction: null, // 'pickup' veya 'dropoff'
         currentStep: 1,      // 1: Plaka, 2: Kilometre
         plate: null,
-        mileage: null
+        actionType: null,
+        mileage: null,
+        notes: null
     };
 
     // Tüm ekranları gizleme yardımcı fonksiyonu
@@ -98,11 +102,13 @@ document.addEventListener('DOMContentLoaded', () => {
     backToActionsBtn.addEventListener('click', showActionSelection);
     actionLogoutBtn.addEventListener('click', logout);
 
-    function startProcess(title, actionType) {
-        state.currentAction = actionType;
+    function startProcess(title, actionTypeStr) {
+        state.currentAction = actionTypeStr;
         state.currentStep = 1;
         state.plate = null;
+        state.actionType = null;
         state.mileage = null;
+        state.notes = null;
         
         dashboardTitle.textContent = title;
         
@@ -127,8 +133,8 @@ document.addEventListener('DOMContentLoaded', () => {
             instructionText.textContent = 'Plakayı okutun veya menüden plakayı seçin.';
             cameraOverlayText.textContent = 'Plakayı okutun';
             
-            manualTitle.textContent = 'Manuel Plaka Seçimi';
-            manualSubtitle.textContent = 'Sisteme kayıtlı plakalardan birini seçebilirsiniz.';
+            manualTitle.textContent = 'Araç ve İşlem Seçimi';
+            manualSubtitle.textContent = 'Kayıtlı plakayı ve hareket tipini seçin.';
             
             stepPlateContainer.classList.remove('hidden');
             stepMileageContainer.classList.add('hidden');
@@ -144,8 +150,8 @@ document.addEventListener('DOMContentLoaded', () => {
             instructionText.textContent = 'Kilometreyi okutun veya manuel olarak girin.';
             cameraOverlayText.textContent = 'Kilometreyi okutun';
             
-            manualTitle.textContent = 'Manuel Kilometre Girişi';
-            manualSubtitle.textContent = `Plaka: ${state.plate}`;
+            manualTitle.textContent = 'Kilometre ve Açıklama';
+            manualSubtitle.textContent = `Plaka: ${state.plate} | Tip: ${state.actionType}`;
             
             stepPlateContainer.classList.add('hidden');
             stepMileageContainer.classList.remove('hidden');
@@ -167,15 +173,16 @@ document.addEventListener('DOMContentLoaded', () => {
     processBtn.addEventListener('click', async () => {
         if (state.currentStep === 1) {
             state.plate = plateSelect.value;
-            window.showToast('Plaka onaylandı. Lütfen kilometreyi girin.', 'success');
+            state.actionType = actionTypeSelect.value;
+            window.showToast('Plaka onaylandı. Lütfen kilometre girin.', 'success');
             state.currentStep = 2;
             renderStep();
             
         } else if (state.currentStep === 2) {
             state.mileage = mileageInput.value.trim();
-            const actionStr = state.currentAction === 'pickup' ? 'Araç Alma' : 'Teslim Etme';
+            state.notes = notesInput.value.trim();
             
-            // Backend'e kaydet
+            // Backend'e kaydet (ACTIVE_TRIPS / RECORDS_DB mantığı)
             try {
                 processBtn.disabled = true;
                 const response = await fetch('/api/record', {
@@ -183,16 +190,18 @@ document.addEventListener('DOMContentLoaded', () => {
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         plate: state.plate,
-                        action: actionStr,
+                        action: state.currentAction, // 'pickup' veya 'dropoff'
+                        action_type: state.actionType, // 'Periyodik Bakım' vb.
                         mileage: state.mileage,
-                        user: state.username
+                        user: state.username,
+                        notes: state.notes
                     })
                 });
                 
                 const result = await response.json();
                 
                 if (response.ok && result.success) {
-                    window.showToast(`${actionStr} başarıyla kaydedildi!<br>Plaka: ${state.plate} | KM: ${state.mileage}`, 'success');
+                    window.showToast(result.message, 'success');
                 } else {
                     window.showToast(result.message || 'Kayıt sırasında hata oluştu.', 'error');
                 }
@@ -201,6 +210,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 window.showToast('Sunucu ile iletişim kurulamadı.', 'error');
             } finally {
                 mileageInput.value = '';
+                notesInput.value = '';
                 plateSelect.value = '';
                 processBtn.disabled = false;
                 
@@ -212,29 +222,25 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // ---- RAPORLAR MENÜSÜ AKIŞI ----
     
-    // Raporlar Menüsünü Aç
     reportMenuBtn.addEventListener('click', () => {
         hideAllSections();
         reportsMenuSection.classList.remove('hidden');
         reportsMenuSection.classList.add('active');
     });
 
-    // Menüden Geri Dön
     backFromReportsMenuBtn.addEventListener('click', showActionSelection);
 
-    // 1- Son Hareket Raporu
     reportRecentBtn.addEventListener('click', () => {
         reportTitle.textContent = "Son Hareket Raporu";
         fetchAndShowReport('/api/reports/recent');
     });
 
-    // 2- Araç Bazlı Rapor Seçim Ekranını Aç
     reportVehicleBtn.addEventListener('click', () => {
         hideAllSections();
         vehicleReportSelectionSection.classList.remove('hidden');
         vehicleReportSelectionSection.classList.add('active');
         
-        loadPlatesForReport(); // Plakaları dropdown'a doldur
+        loadPlatesForReport();
     });
     
     backFromVehicleSelectBtn.addEventListener('click', () => {
@@ -247,7 +253,6 @@ document.addEventListener('DOMContentLoaded', () => {
         viewVehicleReportBtn.disabled = (e.target.value === "");
     });
     
-    // Araç Raporunu Görüntüle Butonu
     viewVehicleReportBtn.addEventListener('click', () => {
         const selectedPlate = reportPlateSelect.value;
         if(selectedPlate) {
@@ -256,20 +261,18 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // Rapor Detayından Geri Dön
     backToReportsMenuBtn.addEventListener('click', () => {
         hideAllSections();
         reportsMenuSection.classList.remove('hidden');
         reportsMenuSection.classList.add('active');
     });
 
-    // Raporu Backend'den Çek ve Tabloya Bas
     async function fetchAndShowReport(apiUrl) {
         hideAllSections();
         reportDetailSection.classList.remove('hidden');
         reportDetailSection.classList.add('active');
         
-        reportTableBody.innerHTML = '<tr><td colspan="5" style="text-align:center;">Yükleniyor...</td></tr>';
+        reportTableBody.innerHTML = '<tr><td colspan="11" style="text-align:center;">Yükleniyor...</td></tr>';
         
         try {
             const response = await fetch(apiUrl);
@@ -278,12 +281,12 @@ document.addEventListener('DOMContentLoaded', () => {
             if (response.ok && result.success) {
                 renderTable(result.records);
             } else {
-                reportTableBody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:#ef4444;">Veriler alınamadı.</td></tr>';
+                reportTableBody.innerHTML = '<tr><td colspan="11" style="text-align:center; color:#ef4444;">Veriler alınamadı.</td></tr>';
                 window.showToast('Raporlar alınamadı.', 'error');
             }
         } catch (error) {
             console.error("Rapor API hatası:", error);
-            reportTableBody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:#ef4444;">Sunucu bağlantı hatası.</td></tr>';
+            reportTableBody.innerHTML = '<tr><td colspan="11" style="text-align:center; color:#ef4444;">Sunucu bağlantı hatası.</td></tr>';
             window.showToast('Sunucu ile iletişim kurulamadı.', 'error');
         }
     }
@@ -292,18 +295,24 @@ document.addEventListener('DOMContentLoaded', () => {
         reportTableBody.innerHTML = '';
         
         if (records.length === 0) {
-            reportTableBody.innerHTML = '<tr><td colspan="5" style="text-align:center;">Henüz bir kayıt bulunmuyor.</td></tr>';
+            reportTableBody.innerHTML = '<tr><td colspan="11" style="text-align:center;">Henüz bir kayıt bulunmuyor.</td></tr>';
             return;
         }
         
         records.forEach(record => {
             const tr = document.createElement('tr');
             tr.innerHTML = `
-                <td>${record.timestamp}</td>
-                <td><strong>${record.plate}</strong></td>
-                <td>${record.action}</td>
-                <td>${record.mileage} KM</td>
-                <td>${record.user}</td>
+                <td>${record.action_type || '-'}</td>
+                <td>${record.add_date || '-'}</td>
+                <td>${record.vehicle_name || '-'}</td>
+                <td><strong>${record.plate || '-'}</strong></td>
+                <td>${record.driver || '-'}</td>
+                <td>${record.start_mileage || '-'}</td>
+                <td>${record.end_mileage || '-'}</td>
+                <td>${record.start_date || '-'}</td>
+                <td><strong>${record.distance || '0'}</strong></td>
+                <td>${record.end_date || '-'}</td>
+                <td>${record.notes || ''}</td>
             `;
             reportTableBody.appendChild(tr);
         });
