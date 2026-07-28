@@ -329,6 +329,8 @@ button {
 .report-wrapper {
     margin: 20px auto;
     padding: 30px;
+    width: 95%;
+    max-width: 1800px;
 }
 .table-container {
     width: 100%;
