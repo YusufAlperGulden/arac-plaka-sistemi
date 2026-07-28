@@ -122,6 +122,9 @@ document.addEventListener('DOMContentLoaded', () => {
         if (window.cameraController) {
             window.cameraController.startCamera();
         }
+        
+        // Kamera açıldığında (veya işlem başladığında) lazy-load OCR
+        initOcrWorker();
     }
     
     let ocrWorker = null;
@@ -141,10 +144,41 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
     
-    // Uygulama yüklenirken worker'ı başlat
-    initOcrWorker();
-
     const triggerOcrBtn = document.getElementById('trigger-ocr-btn');
+    
+    // Modal DOM Elements
+    const ocrConfirmModal = document.getElementById('ocr-confirm-modal');
+    const ocrResultText = document.getElementById('ocr-result-text');
+    const ocrConfidence = document.getElementById('ocr-confidence');
+    const ocrDbStatus = document.getElementById('ocr-db-status');
+    const ocrConfirmBtn = document.getElementById('ocr-confirm-btn');
+    const ocrEditBtn = document.getElementById('ocr-edit-btn');
+    const ocrRetryBtn = document.getElementById('ocr-retry-btn');
+    const ocrManualEditContainer = document.getElementById('ocr-manual-edit-container');
+    const ocrManualInput = document.getElementById('ocr-manual-input');
+
+    let currentOcrPlate = null;
+
+    function normalizePlate(text) {
+        let clean = text.replace(/[^A-Z0-9]/gi, '').toUpperCase();
+        // Basit bağlamsal düzeltmeler
+        // Örneğin ilk 2 karakter rakam olmalı, O yerine 0 gelmişse düzelt.
+        if (clean.length >= 2) {
+            let firstTwo = clean.substring(0, 2).replace(/O/g, '0').replace(/I/g, '1');
+            clean = firstTwo + clean.substring(2);
+        }
+        return clean;
+    }
+
+    function checkPlateInDb(plateText) {
+        for (let i = 0; i < plateSelect.options.length; i++) {
+            if (plateSelect.options[i].value === plateText) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     if (triggerOcrBtn) {
         triggerOcrBtn.addEventListener('click', async () => {
             if (isOcrProcessing || !ocrWorker || !window.cameraController || !window.cameraController.videoElement || window.cameraController.videoElement.readyState !== 4) {
@@ -159,61 +193,84 @@ document.addEventListener('DOMContentLoaded', () => {
 
             try {
                 const video = window.cameraController.videoElement;
+                const roiBox = document.getElementById('ocr-roi-box');
                 
-                // 1. ROI Kırpma (Ekranda gösterilen çerçeve ile orantılı)
-                // Çerçeve %70 genişlikte ve %35 yükseklikte ortalanmış.
-                const cropWidth = video.videoWidth * 0.7;
-                const cropHeight = video.videoHeight * 0.35;
-                const cropX = (video.videoWidth - cropWidth) / 2;
-                const cropY = (video.videoHeight - cropHeight) / 2;
+                // 1. Koordinat Eşleme ve Kırpma (object-fit: cover uyumlu)
+                const videoRect = video.getBoundingClientRect();
+                const roiRect = roiBox.getBoundingClientRect();
+                
+                const scaleX = video.videoWidth / videoRect.width;
+                const scaleY = video.videoHeight / videoRect.height;
+                const scale = Math.min(scaleX, scaleY);
+                
+                const displayedWidth = video.videoWidth / scale;
+                const displayedHeight = video.videoHeight / scale;
+                const offsetX = (videoRect.width - displayedWidth) / 2;
+                const offsetY = (videoRect.height - displayedHeight) / 2;
+                
+                const roiX = roiRect.left - videoRect.left;
+                const roiY = roiRect.top - videoRect.top;
+                
+                const cropX = (roiX - offsetX) * scale;
+                const cropY = (roiY - offsetY) * scale;
+                const cropWidth = roiRect.width * scale;
+                const cropHeight = roiRect.height * scale;
                 
                 const canvas = document.createElement('canvas');
-                canvas.width = cropWidth;
-                canvas.height = cropHeight;
+                canvas.width = cropWidth * 2; // 2x Scale for better OCR
+                canvas.height = cropHeight * 2;
                 const ctx = canvas.getContext('2d');
                 
-                ctx.drawImage(video, cropX, cropY, cropWidth, cropHeight, 0, 0, cropWidth, cropHeight);
+                ctx.drawImage(video, cropX, cropY, cropWidth, cropHeight, 0, 0, canvas.width, canvas.height);
                 
-                // 2. Ön işleme (Grayscale ve Basit Threshold)
+                // 2. Grayscale & Adaptive Threshold
                 const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
                 const data = imageData.data;
                 for (let i = 0; i < data.length; i += 4) {
                     const gray = 0.299 * data[i] + 0.587 * data[i+1] + 0.114 * data[i+2];
-                    const thresholdValue = gray > 110 ? 255 : 0; // Koyu kısımları siyah, açık kısımları beyaz yap
-                    data[i] = data[i+1] = data[i+2] = thresholdValue;
+                    const threshold = gray > 100 ? 255 : 0;
+                    data[i] = data[i+1] = data[i+2] = threshold;
                 }
                 ctx.putImageData(imageData, 0, 0);
                 
-                // 3. OCR (Sadece kırpılmış ve işlenmiş ROI alanı)
-                const result = await ocrWorker.recognize(canvas);
+                // 3. OCR İşlemi
+                const result = await ocrWorker.recognize(canvas, {
+                    tessedit_pageseg_mode: Tesseract.PSM.SINGLE_LINE
+                });
+                
                 const text = result.data.text;
+                const confidence = result.data.confidence;
                 
-                // 4. Regex ile Plaka Ayıklama
-                const plateRegex = /([0-9]{2})\s*([A-Z]{1,3})\s*([0-9]{2,4})/i;
-                const match = plateRegex.exec(text);
+                const normalizedText = normalizePlate(text);
+                const plateRegex = /^([0-9]{2})([A-Z]{1,3})([0-9]{2,4})$/i;
+                const match = plateRegex.exec(normalizedText);
                 
-                if (match) {
-                    const detectedPlate = (match[1] + match[2] + match[3]).toUpperCase();
+                if (match && confidence >= 60) {
+                    currentOcrPlate = normalizedText;
                     
-                    // 5. Doğrulama ve UI Doldurma
-                    let found = false;
-                    for (let i = 0; i < plateSelect.options.length; i++) {
-                        if (plateSelect.options[i].value === detectedPlate) {
-                            found = true;
-                            plateSelect.value = detectedPlate;
-                            break;
-                        }
-                    }
+                    // Modal'ı Doldur
+                    ocrResultText.textContent = match[1] + " " + match[2] + " " + match[3];
+                    ocrConfidence.textContent = "%" + Math.round(confidence);
+                    ocrConfidence.style.color = confidence > 80 ? "#4ade80" : "#facc15";
                     
-                    if (found) {
-                        window.showToast(`Plaka Bulundu: ${detectedPlate}`, 'success');
-                        processBtn.disabled = false;
-                        window.cameraController.stopCamera(); // Bulunduğu için kamerayı kapat
+                    const isRegistered = checkPlateInDb(currentOcrPlate);
+                    if (isRegistered) {
+                        ocrDbStatus.innerHTML = '✅ Sistemde Bulundu';
+                        ocrDbStatus.style.color = "#4ade80";
+                        ocrConfirmBtn.disabled = false;
+                        ocrConfirmBtn.style.opacity = "1";
                     } else {
-                        window.showToast(`Plaka (${detectedPlate}) okundu ancak sistemde kayıtlı değil.`, 'error');
+                        ocrDbStatus.innerHTML = '❌ Kayıtlı Değil';
+                        ocrDbStatus.style.color = "#ef4444";
+                        ocrConfirmBtn.disabled = true; // Sadece kayıtlı plakalara izin verebiliriz veya manuel girmesini isteriz
+                        ocrConfirmBtn.style.opacity = "0.5";
                     }
+                    
+                    ocrManualEditContainer.classList.add('hidden');
+                    ocrConfirmModal.classList.remove('hidden');
+                    
                 } else {
-                    window.showToast('Plaka net okunamadı. Çerçeveye tam oturtup tekrar deneyin.', 'error');
+                    window.showToast('Plaka net okunamadı veya güven skoru düşük. Çerçeveye tam oturtup tekrar deneyin.', 'error');
                 }
             } catch (err) {
                 console.error("OCR Hatası:", err);
@@ -223,6 +280,40 @@ document.addEventListener('DOMContentLoaded', () => {
                 triggerOcrBtn.innerHTML = originalText;
                 triggerOcrBtn.disabled = false;
             }
+        });
+    }
+
+    // Modal Event Listeners
+    if (ocrConfirmBtn) {
+        ocrConfirmBtn.addEventListener('click', () => {
+            const finalPlate = ocrManualEditContainer.classList.contains('hidden') ? currentOcrPlate : normalizePlate(ocrManualInput.value);
+            
+            if (checkPlateInDb(finalPlate)) {
+                plateSelect.value = finalPlate;
+                processBtn.disabled = false;
+                ocrConfirmModal.classList.add('hidden');
+                window.showToast(`Plaka Onaylandı: ${finalPlate}`, 'success');
+                if (window.cameraController) window.cameraController.stopCamera();
+            } else {
+                window.showToast('Girilen plaka sistemde kayıtlı değil!', 'error');
+            }
+        });
+    }
+
+    if (ocrRetryBtn) {
+        ocrRetryBtn.addEventListener('click', () => {
+            ocrConfirmModal.classList.add('hidden');
+        });
+    }
+
+    if (ocrEditBtn) {
+        ocrEditBtn.addEventListener('click', () => {
+            ocrManualEditContainer.classList.remove('hidden');
+            ocrManualInput.value = currentOcrPlate;
+            ocrManualInput.focus();
+            
+            ocrConfirmBtn.disabled = false;
+            ocrConfirmBtn.style.opacity = "1";
         });
     }
 
