@@ -120,7 +120,6 @@ document.addEventListener('DOMContentLoaded', () => {
         renderStep();
         
         if (window.cameraController) {
-        if (window.cameraController) {
             window.cameraController.startCamera();
         }
     }
