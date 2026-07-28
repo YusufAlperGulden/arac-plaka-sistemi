@@ -1,5 +1,17 @@
 from flask import Flask, render_template, request, jsonify
 from datetime import datetime
+import os
+import base64
+try:
+    import google.generativeai as genai
+    GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
+    if GEMINI_API_KEY:
+        genai.configure(api_key=GEMINI_API_KEY)
+    else:
+        print("WARNING: GEMINI_API_KEY not found.")
+except ImportError:
+    genai = None
+    print("WARNING: google.generativeai not installed.")
 
 app = Flask(__name__)
 
@@ -183,6 +195,51 @@ def save_record():
         return jsonify({"success": True, "message": f"{plate} işlemi tamamlandı. (Yapılan KM: {dist})"}), 201
         
     return jsonify({"success": False, "message": "Geçersiz işlem."}), 400
+
+@app.route('/api/gemini-ocr', methods=['POST'])
+def gemini_ocr():
+    if not genai or not os.environ.get("GEMINI_API_KEY"):
+        return jsonify({"success": False, "message": "Gemini API anahtarı ayarlanmamış veya kütüphane eksik."}), 503
+        
+    data = request.get_json()
+    if not data or 'image' not in data:
+        return jsonify({"success": False, "message": "Resim verisi eksik."}), 400
+        
+    base64_img = data.get('image')
+    # Beklenen format: "data:image/jpeg;base64,/9j/4AAQSk..."
+    if base64_img.startswith('data:image'):
+        try:
+            mime_type = base64_img.split(';')[0].split(':')[1]
+            base64_data = base64_img.split(',')[1]
+            image_bytes = base64.b64decode(base64_data)
+        except Exception as e:
+            return jsonify({"success": False, "message": "Base64 çözümleme hatası."}), 400
+    else:
+        return jsonify({"success": False, "message": "Geçersiz resim formatı."}), 400
+
+    try:
+        model = genai.GenerativeModel("gemini-1.5-flash")
+        
+        prompt = (
+            "You are an Automatic License Plate Recognition (ALPR) system. "
+            "Read the license plate from the image. "
+            "Return ONLY the license plate characters (letters and numbers) with NO spaces, NO punctuation, and NO markdown. "
+            "If you cannot read a plate, return 'UNKNOWN'."
+        )
+        
+        response = model.generate_content([
+            {'mime_type': mime_type, 'data': base64_data},
+            prompt
+        ])
+        
+        text = response.text.strip().replace(" ", "").upper()
+        if text == "UNKNOWN" or not text:
+            return jsonify({"success": False, "message": "Plaka okunamadı."}), 400
+            
+        return jsonify({"success": True, "plate": text}), 200
+    except Exception as e:
+        print("Gemini API Error:", e)
+        return jsonify({"success": False, "message": str(e)}), 500
 
 @app.route('/api/reports/recent', methods=['GET'])
 def get_recent_reports():
