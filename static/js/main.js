@@ -225,7 +225,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Rapor state
     let currentRecords = [];
     const filterActionType = document.getElementById('filter-action-type');
-    const filterDriver = document.getElementById('filter-driver');
+    const globalSearch = document.getElementById('global-search');
     const sortBy = document.getElementById('sort-by');
 
     reportMenuBtn.addEventListener('click', () => {
@@ -275,7 +275,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Filtreleme ve Sıralama Event Listener'ları
     filterActionType.addEventListener('change', applyFiltersAndSort);
-    filterDriver.addEventListener('input', applyFiltersAndSort);
+    globalSearch.addEventListener('input', applyFiltersAndSort);
     sortBy.addEventListener('change', applyFiltersAndSort);
 
     async function fetchAndShowReport(apiUrl) {
@@ -287,7 +287,7 @@ document.addEventListener('DOMContentLoaded', () => {
         
         // Reset filters
         filterActionType.value = 'all';
-        filterDriver.value = '';
+        globalSearch.value = '';
         sortBy.value = 'date-desc';
 
         try {
@@ -330,10 +330,13 @@ document.addEventListener('DOMContentLoaded', () => {
             filtered = filtered.filter(r => (r.action_type || '').includes(typeFilter));
         }
 
-        // Filtreleme - Sürücü Adı
-        const driverFilter = filterDriver.value.toLowerCase();
-        if (driverFilter.trim() !== '') {
-            filtered = filtered.filter(r => (r.driver || '').toLowerCase().includes(driverFilter));
+        // Filtreleme - Global Arama (Plaka, Araç, Sürücü, Not)
+        const searchVal = globalSearch.value.toLowerCase().trim();
+        if (searchVal !== '') {
+            filtered = filtered.filter(r => {
+                const combinedString = `${r.plate || ''} ${r.vehicle_name || ''} ${r.driver || ''} ${r.notes || ''}`.toLowerCase();
+                return combinedString.includes(searchVal);
+            });
         }
 
         // Sıralama
