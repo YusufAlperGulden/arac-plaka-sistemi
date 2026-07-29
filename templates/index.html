@@ -253,9 +253,7 @@
                         <video id="camera-stream" autoplay playsinline muted></video>
                         
                         <!-- Otomatik tespit alanı; sabit çerçeve yalnız yedek kırpımdır. -->
-                        <div id="ocr-roi-box" class="ocr-guide-box">
-                            <span>Plakayı kameraya gösterin • otomatik bulunur</span>
-                        </div>
+                        <div id="ocr-roi-box" class="ocr-guide-box" aria-hidden="true"></div>
                         <div id="plate-detection-box" class="plate-detection-box hidden" aria-hidden="true">
                             <span id="plate-detection-label">Plaka aranıyor</span>
                         </div>
@@ -269,6 +267,9 @@
                     </div>
                     <!-- OCR Manuel Tetikleme Butonu -->
                     <div style="margin-top: 15px;">
+                        <p class="camera-guide-text">
+                            Plakayı kameraya gösterin • otomatik bulunur
+                        </p>
                         <p id="auto-scan-status" class="auto-scan-status" aria-live="polite">
                             Otomatik tarama kamera açılınca başlayacak.
                         </p>

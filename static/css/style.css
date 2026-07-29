@@ -530,24 +530,16 @@ button {
     border-radius: 10px;
     box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.28);
     pointer-events: none;
-    display: flex;
-    align-items: flex-end;
-    justify-content: center;
-    padding: 0 8px 8px;
     z-index: 3;
 }
 
-.ocr-guide-box span {
-    max-width: 100%;
-    padding: 4px 8px;
-    border-radius: 5px;
-    background: rgba(0, 0, 0, 0.68);
-    color: #fff;
-    font-size: 0.76rem;
+.camera-guide-text {
+    margin: 0 0 5px;
+    color: var(--text-primary);
+    font-size: 0.88rem;
     font-weight: 700;
-    line-height: 1.25;
+    line-height: 1.35;
     text-align: center;
-    text-shadow: 1px 1px 2px #000;
 }
 
 .plate-detection-box {
