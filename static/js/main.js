@@ -183,9 +183,6 @@ document.addEventListener('DOMContentLoaded', () => {
     let isOcrProcessing = false;
     let isPlateListReady = false;
     let ocrSessionId = 0;
-    const OCR_MIN_CONFIDENCE = 0;
-    const OCR_CONSENSUS_MIN_CONFIDENCE = 0;
-    const OCR_STRONG_CONFIDENCE = 82;
     const OCR_GENERAL_PARAMETERS = Object.freeze({
         tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 ',
         tessedit_pageseg_mode: '7',
@@ -201,8 +198,8 @@ document.addEventListener('DOMContentLoaded', () => {
         tessedit_pageseg_mode: '10',
         preserve_interword_spaces: '0'
     });
-    const GEMINI_TIMEOUT_MS = 12000;
-    const TESSERACT_STAGE_TIMEOUT_MS = 8000;
+    const GEMINI_TIMEOUT_MS = 20000;
+    const TESSERACT_STAGE_TIMEOUT_MS = 15000;
     const DETECTION_MAX_WIDTH = 520;
     const AUTO_SCAN_INTERVAL_MS = 900;
     const AUTO_SCAN_STABLE_FRAMES = 2;
@@ -929,7 +926,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const serverCandidateEntries = cropCaptures
             .map((capture, captureIndex) => ({ capture, captureIndex }))
             .filter(entry => !entry.capture.sourceCrop?.estimateOnly)
-            .slice(0, 3);
+            .slice(0, 4);
         const serverCandidates = serverCandidateEntries.map(entry => entry.capture);
         if (!serverCandidates.length) {
             return null;
@@ -958,6 +955,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 return {
                     plate,
                     candidateIndex: serverCandidateEntries[serverCandidateIndex].captureIndex,
+                    estimated: Boolean(data.estimated),
                 };
             }
 
@@ -1386,10 +1384,6 @@ document.addEventListener('DOMContentLoaded', () => {
                     !capture.sourceCrop?.estimateOnly
                     && parsed
                     && hasSafeProvinceEvidence
-                    && (
-                        confidence >= OCR_CONSENSUS_MIN_CONFIDENCE
-                        || registeredMatch
-                    )
                 ) {
                     const corrected = Boolean(
                         registeredMatch?.corrected || parsed.ocrCorrected
@@ -1434,21 +1428,6 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                     votes.set(candidate.text, vote);
 
-                    // Çok güçlü tek sonuçta veya iki bağımsız görüntü varyantı aynı
-                    // plakada birleştiğinde erken dön; ilk düşük güvenli sözdizimsel
-                    // eşleşmeyi artık doğrudan kabul etmiyoruz.
-                    if (
-                        confidence >= OCR_STRONG_CONFIDENCE
-                        && !corrected
-                    ) {
-                        return candidate;
-                    }
-                    if (shouldAcceptOcrConsensus(vote)) {
-                        return {
-                            ...vote.best,
-                            consensus: vote.count,
-                        };
-                    }
                 }
             }
         }
@@ -1466,8 +1445,14 @@ document.addEventListener('DOMContentLoaded', () => {
             );
         });
         const best = candidates[0] || null;
-        if (best) {
-            const bestVote = votes.get(best.text);
+        const bestVote = best ? votes.get(best.text) : null;
+        if (
+            best
+            && (
+                best.registered
+                || shouldAcceptOcrConsensus(bestVote)
+            )
+        ) {
             return { ...best, consensus: bestVote?.count || 1 };
         }
 
@@ -1478,7 +1463,7 @@ document.addEventListener('DOMContentLoaded', () => {
             fullObservations,
             provinceObservations
         );
-        if (!estimate) {
+        if (!estimate || estimate.provinceEvidenceCount < 2) {
             const segmentedProvinceObservations = (
                 await requestProvinceSegmentObservations(
                     worker,
@@ -1493,15 +1478,34 @@ document.addEventListener('DOMContentLoaded', () => {
                 ...provinceObservations,
                 ...segmentedProvinceObservations,
             ];
-            estimate = inferTurkishPlateEstimate(
+            const corroboratedEstimate = inferTurkishPlateEstimate(
                 fullObservations,
                 provinceObservations
             );
+            if (corroboratedEstimate) {
+                estimate = corroboratedEstimate;
+            }
+        }
+        if (!estimate) {
+            estimate = inferTurkishPlateEstimate(
+                fullObservations,
+                provinceObservations,
+                { minimumSuffixEvidence: 1 }
+            );
         }
 
-        return estimate
-            ? buildTentativeOcrMatch(estimate, fullObservations)
-            : null;
+        if (estimate) {
+            return buildTentativeOcrMatch(estimate, fullObservations);
+        }
+        if (best) {
+            return {
+                ...best,
+                estimated: true,
+                requiresConfirmation: true,
+                consensus: bestVote?.count || 1,
+            };
+        }
+        return null;
     }
 
     function showOcrResult(bestMatch, source) {
@@ -1663,6 +1667,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     text: parsed.normalized,
                     confidence: null,
                     corrected: Boolean(parsed.ocrCorrected),
+                    estimated: Boolean(serverResult.estimated),
+                    requiresConfirmation: Boolean(serverResult.estimated),
                     parts: [
                         parsed.provinceCode.toString().padStart(2, '0'),
                         parsed.letters,

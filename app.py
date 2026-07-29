@@ -20,7 +20,7 @@ except ImportError:
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
 GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.5-flash-lite")
 MAX_OCR_IMAGE_BYTES = 20 * 1024 * 1024
-MAX_OCR_IMAGES = 3
+MAX_OCR_IMAGES = 4
 MAX_OCR_TOTAL_BYTES = 20 * 1024 * 1024
 MAX_OCR_TOTAL_PIXELS = 20_000_000
 ALLOWED_IMAGE_FORMATS = {
@@ -33,7 +33,7 @@ gemini_client = None
 if genai and GEMINI_API_KEY:
     gemini_client = genai.Client(
         api_key=GEMINI_API_KEY,
-        http_options=genai_types.HttpOptions(timeout=8_000),
+        http_options=genai_types.HttpOptions(timeout=15_000),
     )
 elif not GEMINI_API_KEY:
     print("WARNING: GEMINI_API_KEY not found. Browser OCR fallback will be used.")
@@ -52,7 +52,8 @@ app.config.update(
     ).lower() not in {"0", "false", "no"},
     SESSION_COOKIE_SAMESITE="Lax",
     PERMANENT_SESSION_LIFETIME=1800,
-    MAX_CONTENT_LENGTH=20 * 1024 * 1024,
+    # JSON data URLs add roughly 33% base64 overhead to decoded image bytes.
+    MAX_CONTENT_LENGTH=28 * 1024 * 1024,
 )
 
 # Trust 1 proxy (Render)
@@ -358,7 +359,7 @@ def normalize_turkish_ocr_plate(value):
             continue
 
         correction_count = province[1] + letters[1] + digits[1]
-        if correction_count < 1 or correction_count > 2:
+        if correction_count < 1:
             continue
 
         normalized = normalize_turkish_plate(
@@ -400,13 +401,16 @@ def decode_ocr_image(data_url):
     if not image_bytes:
         raise ValueError("Resim verisi boş.")
     if len(image_bytes) > MAX_OCR_IMAGE_BYTES:
-        raise ValueError("Görsel boyutu çok büyük (Maksimum: 2 MB).")
+        maximum_megabytes = MAX_OCR_IMAGE_BYTES // (1024 * 1024)
+        raise ValueError(
+            f"Görsel boyutu çok büyük (Maksimum: {maximum_megabytes} MB)."
+        )
 
     try:
         with Image.open(io.BytesIO(image_bytes)) as image:
             width, height = image.size
             image_format = image.format
-            if width < 32 or height < 16 or width * height > 20_000_000:
+            if width < 32 or height < 16 or width * height > MAX_OCR_TOTAL_PIXELS:
                 raise ValueError("Görsel boyutları OCR için uygun değil.")
             image.verify()
     except ValueError:
@@ -422,7 +426,7 @@ def decode_ocr_image(data_url):
 
 
 def decode_ocr_images(data):
-    """Decode one legacy image or up to three automatically detected crops."""
+    """Decode one legacy image or automatically detected crop candidates."""
     if not isinstance(data, dict):
         raise ValueError("Resim verisi eksik veya geçersiz.")
 
@@ -447,7 +451,11 @@ def decode_ocr_images(data):
         image_bytes, mime_type, pixel_count = decode_ocr_image(value)
         total_bytes += len(image_bytes)
         if total_bytes > MAX_OCR_TOTAL_BYTES:
-            raise ValueError("OCR görsellerinin toplam boyutu çok büyük (Maksimum: 2 MB).")
+            maximum_megabytes = MAX_OCR_TOTAL_BYTES // (1024 * 1024)
+            raise ValueError(
+                "OCR görsellerinin toplam boyutu çok büyük "
+                f"(Maksimum: {maximum_megabytes} MB)."
+            )
         total_pixels += pixel_count
         if total_pixels > MAX_OCR_TOTAL_PIXELS:
             raise ValueError("OCR görsellerinin toplam çözünürlüğü çok büyük.")
@@ -465,7 +473,7 @@ def rate_limit_exceeded(_error):
 
 
 @app.route('/api/gemini-ocr', methods=['POST'])
-@limiter.limit("5 per minute", key_func=get_rate_limit_key)
+@limiter.limit("20 per minute", key_func=get_rate_limit_key)
 def gemini_ocr():
     if 'user' not in session:
         return jsonify({
@@ -499,9 +507,15 @@ def gemini_ocr():
             "two-digit province code are: 1 letter plus 4-5 digits, 2 letters plus "
             "3-4 digits, or 3 letters plus 2-3 digits. Plate letters may only be "
             "A-P, R-V, Y, or Z (never Q, W, X, or accented Turkish letters). "
-            "Return null when no crop has a "
-            "clear, unambiguous, valid plate. candidate_index is the zero-based index "
-            "of the crop used; use 0 when only one crop is provided."
+            "Use plate-format positions to resolve only plausible character lookalikes "
+            "such as O/0, I/1, B/8, and S/5. If a plate is visible but blurred, "
+            "partly obscured, reflective, or otherwise uncertain, return the best "
+            "plausible valid reading and set estimated to true; do not return null "
+            "solely because confidence is low. Set estimated to false when the reading "
+            "is clear. Do not invent missing characters. Return null only when no "
+            "plate-like region is present or there are not enough visible characters "
+            "to form any valid layout. candidate_index is the zero-based index of the "
+            "crop used; use 0 when only one crop is provided."
         )
         image_parts = [
             genai_types.Part.from_bytes(data=image_bytes, mime_type=mime_type)
@@ -518,8 +532,9 @@ def gemini_ocr():
                     "properties": {
                         "plate": {"type": "STRING", "nullable": True},
                         "candidate_index": {"type": "INTEGER", "nullable": True},
+                        "estimated": {"type": "BOOLEAN"},
                     },
-                    "required": ["plate", "candidate_index"],
+                    "required": ["plate", "candidate_index", "estimated"],
                 },
                 max_output_tokens=64,
             ),
@@ -528,6 +543,7 @@ def gemini_ocr():
         result_obj = json.loads(response.text or "{}")
         plate_text = normalize_turkish_ocr_plate(result_obj.get("plate"))
         if plate_text:
+            estimated = result_obj.get("estimated", False) is True
             candidate_index = result_obj.get("candidate_index")
             valid_candidate_index = (
                 not isinstance(candidate_index, bool)
@@ -542,6 +558,7 @@ def gemini_ocr():
                 "success": True,
                 "plate": plate_text,
                 "candidate_index": candidate_index,
+                "estimated": estimated,
             }), 200
 
         return jsonify({

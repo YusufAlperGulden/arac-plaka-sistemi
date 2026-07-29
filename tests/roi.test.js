@@ -176,6 +176,16 @@ assert.equal(
     true
 );
 
+const multiplePositionAwareCorrections = parseTurkishPlate('O6 A Q23S5');
+assert.equal(multiplePositionAwareCorrections?.normalized, '06A02355');
+assert.equal(multiplePositionAwareCorrections?.correctionCount, 3);
+assert.equal(
+    hasSafeProvinceEvidenceForStrictAutoAcceptance(
+        multiplePositionAwareCorrections
+    ),
+    true
+);
+
 const noDigitProvinceEvidence = parseTurkishPlate('LL GJ 3238');
 assert.equal(noDigitProvinceEvidence?.normalized, '11GJ3238');
 assert.equal(noDigitProvinceEvidence?.provinceCorrectionCount, 2);
@@ -216,6 +226,20 @@ assert.equal(repeatedUnsafeSuffixEstimate?.suffixEvidenceCount, 2);
 assert.equal(repeatedUnsafeSuffixEstimate?.provinceEvidenceCount, 1);
 assert.equal(repeatedUnsafeSuffixEstimate?.bestFullObservationIndex, 1);
 assert.equal(Math.round(repeatedUnsafeSuffixEstimate?.confidence), 60);
+
+const singleUnsafeSuffixEstimate = inferTurkishPlateEstimate(
+    [
+        { text: 'LL GJ 3238', confidence: 0, evidenceKey: 'full-a' },
+    ],
+    [
+        { text: '34', confidence: 0, evidenceKey: 'province-a' },
+    ],
+    { minimumSuffixEvidence: 1 }
+);
+assert.equal(singleUnsafeSuffixEstimate?.normalized, '34GJ3238');
+assert.equal(singleUnsafeSuffixEstimate?.estimated, true);
+assert.equal(singleUnsafeSuffixEstimate?.suffixEvidenceCount, 1);
+assert.equal(singleUnsafeSuffixEstimate?.provinceEvidenceCount, 1);
 
 const photographedScreenEstimate = inferTurkishPlateEstimate(
     [
@@ -587,6 +611,22 @@ assert.equal(
     shouldAcceptOcrConsensus({
         count: 3,
         totalConfidence: 90,
+        corrected: true,
+    }),
+    true
+);
+assert.equal(
+    shouldAcceptOcrConsensus({
+        count: 2,
+        totalConfidence: 0,
+        corrected: false,
+    }),
+    true
+);
+assert.equal(
+    shouldAcceptOcrConsensus({
+        count: 3,
+        totalConfidence: 0,
         corrected: true,
     }),
     true

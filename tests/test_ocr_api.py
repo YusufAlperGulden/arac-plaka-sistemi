@@ -87,6 +87,7 @@ class OcrApiTests(unittest.TestCase):
             "35 VEB OO1": "35VEB001",
             "35 VEB 00I": "35VEB001",
             "O6 A 12345": "06A12345",
+            "O6 A Q23S5": "06A02355",
             "11 GJ 3238": "11GJ3238",
             "36A0Q348": "36A00348",
         }
@@ -153,15 +154,19 @@ class OcrApiTests(unittest.TestCase):
                 "/api/gemini-ocr",
                 json={"image": "not-a-data-url"},
             ).status_code
-            for _ in range(6)
+            for _ in range(21)
         ]
 
-        self.assertEqual(statuses[:5], [400] * 5)
-        self.assertEqual(statuses[5], 429)
+        self.assertEqual(statuses[:20], [400] * 20)
+        self.assertEqual(statuses[20], 429)
 
     def test_returns_normalized_plate_from_structured_response(self):
         self.authenticate()
-        fake_client = FakeGeminiClient(json.dumps({"plate": "34 KM 4969"}))
+        fake_client = FakeGeminiClient(json.dumps({
+            "plate": "34 KM 4969",
+            "candidate_index": 0,
+            "estimated": False,
+        }))
         app_module.gemini_client = fake_client
 
         response = self.client.post(
@@ -172,6 +177,7 @@ class OcrApiTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.get_json()["plate"], "34KM4969")
         self.assertEqual(response.get_json()["candidate_index"], 0)
+        self.assertFalse(response.get_json()["estimated"])
         self.assertEqual(len(fake_client.models.calls), 1)
         call = fake_client.models.calls[0]
         self.assertEqual(call["model"], app_module.GEMINI_MODEL)
@@ -187,7 +193,8 @@ class OcrApiTests(unittest.TestCase):
         self.authenticate()
         fake_client = FakeGeminiClient(json.dumps({
             "plate": "35 VEB 001",
-            "candidate_index": 1,
+            "candidate_index": 3,
+            "estimated": False,
         }))
         app_module.gemini_client = fake_client
 
@@ -198,27 +205,51 @@ class OcrApiTests(unittest.TestCase):
                     make_image_data_url(),
                     make_image_data_url(),
                     make_image_data_url(),
+                    make_image_data_url(),
                 ],
             },
         )
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.get_json()["plate"], "35VEB001")
-        self.assertEqual(response.get_json()["candidate_index"], 1)
+        self.assertEqual(response.get_json()["candidate_index"], 3)
         call = fake_client.models.calls[0]
-        self.assertEqual(len(call["contents"]), 4)
+        self.assertEqual(len(call["contents"]), 5)
 
-    def test_rejects_more_than_three_auto_crops(self):
+    def test_rejects_more_than_four_auto_crops(self):
         self.authenticate()
         app_module.gemini_client = FakeGeminiClient('{"plate":"34KM4969"}')
 
         response = self.client.post(
             "/api/gemini-ocr",
-            json={"images": [make_image_data_url()] * 4},
+            json={"images": [make_image_data_url()] * 5},
         )
 
         self.assertEqual(response.status_code, 400)
-        self.assertIn("3", response.get_json()["message"])
+        self.assertIn("4", response.get_json()["message"])
+
+    def test_returns_uncertain_visible_plate_as_estimated(self):
+        self.authenticate()
+        fake_client = FakeGeminiClient(json.dumps({
+            "plate": "34 FEZ 963",
+            "candidate_index": 0,
+            "estimated": True,
+        }))
+        app_module.gemini_client = fake_client
+
+        response = self.client.post(
+            "/api/gemini-ocr",
+            json={"image": make_image_data_url()},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json()["plate"], "34FEZ963")
+        self.assertTrue(response.get_json()["estimated"])
+        call = fake_client.models.calls[0]
+        prompt = call["contents"][0]
+        self.assertIn("best plausible valid reading", prompt)
+        self.assertIn("do not return null solely because confidence is low", prompt)
+        self.assertIn("estimated", call["config"].response_schema["properties"])
 
     def test_rejects_excessive_total_crop_resolution(self):
         self.authenticate()

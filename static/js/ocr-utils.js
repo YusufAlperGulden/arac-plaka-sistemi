@@ -159,7 +159,7 @@
                 + letters.corrections
                 + digits.corrections
             );
-            if (correctionCount < 1 || correctionCount > 2) {
+            if (correctionCount < 1) {
                 continue;
             }
 
@@ -380,7 +380,26 @@
         return null;
     }
 
-    function inferTurkishPlateEstimate(fullObservations, provinceObservations) {
+    function inferTurkishPlateEstimate(
+        fullObservations,
+        provinceObservations,
+        {
+            minimumSuffixEvidence = 2,
+            minimumProvinceEvidence = 1,
+        } = {}
+    ) {
+        const requiredSuffixEvidence = (
+            Number.isInteger(minimumSuffixEvidence)
+            && minimumSuffixEvidence >= 1
+        )
+            ? minimumSuffixEvidence
+            : 2;
+        const requiredProvinceEvidence = (
+            Number.isInteger(minimumProvinceEvidence)
+            && minimumProvinceEvidence >= 1
+        )
+            ? minimumProvinceEvidence
+            : 1;
         const suffixVotes = collectUniqueEstimateVotes(
             fullObservations,
             value => {
@@ -400,8 +419,14 @@
             provinceObservations,
             extractFirstStrictProvinceCode
         );
-        const suffix = selectEstimateVote(suffixVotes, 2);
-        const province = selectEstimateVote(provinceVotes, 1);
+        const suffix = selectEstimateVote(
+            suffixVotes,
+            requiredSuffixEvidence
+        );
+        const province = selectEstimateVote(
+            provinceVotes,
+            requiredProvinceEvidence
+        );
         if (!suffix || !province) {
             return null;
         }
@@ -1519,7 +1544,6 @@
 
     function shouldAcceptOcrConsensus({
         count = 0,
-        totalConfidence = 0,
         corrected = false,
         registered = false,
     } = {}) {
@@ -1527,10 +1551,9 @@
             return true;
         }
 
-        const averageConfidence = count > 0 ? totalConfidence / count : 0;
         return corrected
-            ? count >= 3 && averageConfidence >= 28
-            : count >= 2 && averageConfidence >= 30;
+            ? count >= 3
+            : count >= 2;
     }
 
     return {
