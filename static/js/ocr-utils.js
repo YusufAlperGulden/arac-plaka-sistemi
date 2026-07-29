@@ -47,7 +47,20 @@
         return String(value || '').toUpperCase();
     }
 
-    function buildPlate(provinceText, letters, digits) {
+    function hasContiguousOcrProvinceSource(source) {
+        const firstToken = /[A-Z0-9]+/.exec(source);
+        return !firstToken || firstToken[0].length !== 1;
+    }
+
+    function buildPlate(
+        provinceText,
+        letters,
+        digits,
+        {
+            provinceCorrectionCount = 0,
+            provinceLiteralDigitCount = 2,
+        } = {}
+    ) {
         const provinceCode = Number(provinceText);
 
         if (
@@ -71,7 +84,29 @@
             provinceCode,
             letters,
             digits,
+            provinceCorrectionCount,
+            provinceLiteralDigitCount,
         };
+    }
+
+    function hasSafeProvinceEvidenceForStrictAutoAcceptance(parsedPlate) {
+        if (!parsedPlate) {
+            return false;
+        }
+
+        const {
+            provinceCorrectionCount,
+            provinceLiteralDigitCount,
+        } = parsedPlate;
+
+        return (
+            Number.isInteger(provinceCorrectionCount)
+            && provinceCorrectionCount >= 0
+            && provinceCorrectionCount <= 1
+            && Number.isInteger(provinceLiteralDigitCount)
+            && provinceLiteralDigitCount >= 1
+            && provinceLiteralDigitCount <= 2
+        );
     }
 
     function convertOcrSegment(value, expectedType) {
@@ -128,7 +163,17 @@
                 continue;
             }
 
-            const parsed = buildPlate(province.value, letters.value, digits.value);
+            const parsed = buildPlate(
+                province.value,
+                letters.value,
+                digits.value,
+                {
+                    provinceCorrectionCount: province.corrections,
+                    provinceLiteralDigitCount: Array.from(provinceSource)
+                        .filter(character => /\d/.test(character))
+                        .length,
+                }
+            );
             if (parsed) {
                 candidates.push({
                     ...parsed,
@@ -182,7 +227,10 @@
             return buildPlate(compactMatch[1], compactMatch[2], compactMatch[3]);
         }
 
-        if (allowOcrCorrections) {
+        if (
+            allowOcrCorrections
+            && hasContiguousOcrProvinceSource(source)
+        ) {
             const corrected = parsePlateWithOcrCorrections(compact);
             if (corrected) {
                 return corrected;
@@ -190,6 +238,201 @@
         }
 
         return null;
+    }
+
+    function normalizeEstimateEvidenceKey(value) {
+        if (typeof value === 'string' && value.trim()) {
+            return `string:${value.trim()}`;
+        }
+        if (typeof value === 'number' && Number.isFinite(value)) {
+            return `number:${value}`;
+        }
+        return null;
+    }
+
+    function normalizeEstimateConfidence(value) {
+        const confidence = Number(value);
+        if (!Number.isFinite(confidence)) {
+            return 0;
+        }
+        return Math.min(100, Math.max(0, confidence));
+    }
+
+    function collectUniqueEstimateVotes(observations, interpretObservation) {
+        const evidenceVotes = new Map();
+
+        Array.from(observations || []).forEach((observation, observationIndex) => {
+            if (!observation || typeof observation !== 'object') {
+                return;
+            }
+
+            const evidenceKey = normalizeEstimateEvidenceKey(observation.evidenceKey);
+            const interpreted = interpretObservation(observation.text);
+            if (!evidenceKey || !interpreted) {
+                return;
+            }
+
+            const confidence = normalizeEstimateConfidence(observation.confidence);
+            const existing = evidenceVotes.get(evidenceKey);
+            if (!existing) {
+                evidenceVotes.set(evidenceKey, {
+                    interpreted,
+                    confidence,
+                    observationIndex,
+                    conflicted: false,
+                });
+                return;
+            }
+
+            if (existing.interpreted.key !== interpreted.key) {
+                existing.conflicted = true;
+                return;
+            }
+
+            if (confidence > existing.confidence) {
+                existing.confidence = confidence;
+                existing.observationIndex = observationIndex;
+            }
+        });
+
+        const groupedVotes = new Map();
+        evidenceVotes.forEach(evidenceVote => {
+            if (evidenceVote.conflicted) {
+                return;
+            }
+
+            const { interpreted, confidence, observationIndex } = evidenceVote;
+            const vote = groupedVotes.get(interpreted.key) || {
+                ...interpreted,
+                count: 0,
+                totalConfidence: 0,
+                bestConfidence: -1,
+                bestObservationIndex: -1,
+            };
+            vote.count += 1;
+            vote.totalConfidence += confidence;
+            if (
+                confidence > vote.bestConfidence
+                || (
+                    confidence === vote.bestConfidence
+                    && (
+                        vote.bestObservationIndex < 0
+                        || observationIndex < vote.bestObservationIndex
+                    )
+                )
+            ) {
+                vote.bestConfidence = confidence;
+                vote.bestObservationIndex = observationIndex;
+            }
+            groupedVotes.set(interpreted.key, vote);
+        });
+
+        return Array.from(groupedVotes.values()).map(vote => ({
+            ...vote,
+            averageConfidence: vote.totalConfidence / vote.count,
+        }));
+    }
+
+    function selectEstimateVote(votes, minimumCount) {
+        const ranked = Array.from(votes || []).sort((left, right) => (
+            right.count - left.count
+            || right.averageConfidence - left.averageConfidence
+            || left.key.localeCompare(right.key)
+        ));
+        const best = ranked[0];
+        if (!best || best.count < minimumCount) {
+            return null;
+        }
+
+        const conflicting = ranked[1];
+        if (
+            conflicting
+            && conflicting.count === best.count
+            && Math.abs(
+                conflicting.averageConfidence - best.averageConfidence
+            ) <= 8
+        ) {
+            return null;
+        }
+
+        return best;
+    }
+
+    function extractFirstStrictProvinceCode(value) {
+        if (typeof value !== 'string' && typeof value !== 'number') {
+            return null;
+        }
+
+        const source = String(value).trim();
+        if (!source || /[^0-9\s\-_.]/.test(source)) {
+            return null;
+        }
+
+        const digits = source.replace(/\D/g, '');
+        for (let index = 0; index <= digits.length - 2; index += 1) {
+            const provinceText = digits.slice(index, index + 2);
+            const provinceCode = Number(provinceText);
+            if (provinceCode >= 1 && provinceCode <= 81) {
+                return { key: provinceText, provinceText, provinceCode };
+            }
+        }
+
+        return null;
+    }
+
+    function inferTurkishPlateEstimate(fullObservations, provinceObservations) {
+        const suffixVotes = collectUniqueEstimateVotes(
+            fullObservations,
+            value => {
+                const parsed = parseTurkishPlate(value);
+                if (!parsed) {
+                    return null;
+                }
+
+                return {
+                    key: `${parsed.letters}|${parsed.digits}`,
+                    letters: parsed.letters,
+                    digits: parsed.digits,
+                };
+            }
+        );
+        const provinceVotes = collectUniqueEstimateVotes(
+            provinceObservations,
+            extractFirstStrictProvinceCode
+        );
+        const suffix = selectEstimateVote(suffixVotes, 2);
+        const province = selectEstimateVote(provinceVotes, 1);
+        if (!suffix || !province) {
+            return null;
+        }
+
+        const strictPlate = parseTurkishPlate(
+            `${province.provinceText}${suffix.letters}${suffix.digits}`,
+            { allowOcrCorrections: false }
+        );
+        if (!strictPlate) {
+            return null;
+        }
+
+        const totalEvidenceCount = suffix.count + province.count;
+        const confidence = totalEvidenceCount > 0
+            ? (
+                suffix.totalConfidence + province.totalConfidence
+            ) / totalEvidenceCount
+            : 0;
+
+        return {
+            normalized: strictPlate.normalized,
+            provinceCode: strictPlate.provinceCode,
+            letters: strictPlate.letters,
+            digits: strictPlate.digits,
+            estimated: true,
+            requiresConfirmation: true,
+            confidence,
+            suffixEvidenceCount: suffix.count,
+            provinceEvidenceCount: province.count,
+            bestFullObservationIndex: suffix.bestObservationIndex,
+        };
     }
 
     function resolvePlateForForm(value, registeredPlates) {
@@ -247,7 +490,10 @@
             .filter(Boolean);
 
         const parsed = parseTurkishPlate(value);
-        if (parsed) {
+        if (
+            parsed
+            && hasSafeProvinceEvidenceForStrictAutoAcceptance(parsed)
+        ) {
             const exact = targets.find(target => target.normalized === parsed.normalized);
             if (exact) {
                 return {
@@ -261,6 +507,13 @@
         const compact = /[ÇĞİÖŞÜ]/.test(normalizedValue)
             ? ''
             : normalizedValue.replace(/[^A-Z0-9]/g, '');
+        const provinceLiteralDigitCount = Array.from(compact.slice(0, 2))
+            .filter(character => /\d/.test(character))
+            .length;
+        if (provinceLiteralDigitCount < 1) {
+            return null;
+        }
+
         for (const target of targets) {
             const length = target.normalized.length;
             if (compact.length !== length) {
@@ -1284,6 +1537,8 @@
         PLATE_ALLOWED_LETTERS,
         PLATE_DIGIT_COUNTS_BY_LETTER_COUNT,
         parseTurkishPlate,
+        hasSafeProvinceEvidenceForStrictAutoAcceptance,
+        inferTurkishPlateEstimate,
         resolvePlateForForm,
         matchRegisteredPlate,
         mapOverlayToVideoSource,

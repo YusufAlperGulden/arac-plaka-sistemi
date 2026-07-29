@@ -1,4 +1,4 @@
-const CACHE_NAME = 'plaka-sistemi-v13-auto-ocr-fix';
+const CACHE_NAME = 'plaka-sistemi-v14-tentative-ocr';
 const CORE_ASSETS = [
   '/',
   '/static/css/style.css',

@@ -3,6 +3,8 @@ const {
     PLATE_ALLOWED_LETTERS,
     PLATE_DIGIT_COUNTS_BY_LETTER_COUNT,
     parseTurkishPlate,
+    hasSafeProvinceEvidenceForStrictAutoAcceptance,
+    inferTurkishPlateEstimate,
     resolvePlateForForm,
     matchRegisteredPlate,
     mapOverlayToVideoSource,
@@ -143,6 +145,7 @@ for (const invalid of [
     'H02ABG585',
     '102 ABG585',
     '124ABC123',
+    '3 GJ 3235',
     '',
     null,
 ]) {
@@ -155,6 +158,219 @@ assert.deepEqual(PLATE_DIGIT_COUNTS_BY_LETTER_COUNT, {
     2: [3, 4],
     3: [2, 3],
 });
+
+const exactProvinceEvidence = parseTurkishPlate('11 GJ 3238');
+assert.equal(exactProvinceEvidence?.provinceCorrectionCount, 0);
+assert.equal(exactProvinceEvidence?.provinceLiteralDigitCount, 2);
+assert.equal(
+    hasSafeProvinceEvidenceForStrictAutoAcceptance(exactProvinceEvidence),
+    true
+);
+
+const oneDigitProvinceEvidence = parseTurkishPlate('O6 A 12345');
+assert.equal(oneDigitProvinceEvidence?.normalized, '06A12345');
+assert.equal(oneDigitProvinceEvidence?.provinceCorrectionCount, 1);
+assert.equal(oneDigitProvinceEvidence?.provinceLiteralDigitCount, 1);
+assert.equal(
+    hasSafeProvinceEvidenceForStrictAutoAcceptance(oneDigitProvinceEvidence),
+    true
+);
+
+const noDigitProvinceEvidence = parseTurkishPlate('LL GJ 3238');
+assert.equal(noDigitProvinceEvidence?.normalized, '11GJ3238');
+assert.equal(noDigitProvinceEvidence?.provinceCorrectionCount, 2);
+assert.equal(noDigitProvinceEvidence?.provinceLiteralDigitCount, 0);
+assert.equal(
+    hasSafeProvinceEvidenceForStrictAutoAcceptance(noDigitProvinceEvidence),
+    false
+);
+assert.equal(
+    matchRegisteredPlate('LL GJ 3238', ['11GJ3238']),
+    null
+);
+assert.deepEqual(
+    matchRegisteredPlate('O6 A 12345', ['06A12345']),
+    { normalized: '06A12345', corrected: true }
+);
+assert.deepEqual(
+    matchRegisteredPlate('11 GJ 3238', ['11GJ3238']),
+    { normalized: '11GJ3238', corrected: false }
+);
+
+const repeatedUnsafeSuffixEstimate = inferTurkishPlateEstimate(
+    [
+        { text: 'LL GJ 3238', confidence: 41, evidenceKey: 'full-a' },
+        { text: 'LL GJ 3238', confidence: 47, evidenceKey: 'full-b' },
+    ],
+    [
+        { text: '34', confidence: 92, evidenceKey: 'province-a' },
+    ]
+);
+assert.equal(repeatedUnsafeSuffixEstimate?.normalized, '34GJ3238');
+assert.equal(repeatedUnsafeSuffixEstimate?.provinceCode, 34);
+assert.equal(repeatedUnsafeSuffixEstimate?.letters, 'GJ');
+assert.equal(repeatedUnsafeSuffixEstimate?.digits, '3238');
+assert.equal(repeatedUnsafeSuffixEstimate?.estimated, true);
+assert.equal(repeatedUnsafeSuffixEstimate?.requiresConfirmation, true);
+assert.equal(repeatedUnsafeSuffixEstimate?.suffixEvidenceCount, 2);
+assert.equal(repeatedUnsafeSuffixEstimate?.provinceEvidenceCount, 1);
+assert.equal(repeatedUnsafeSuffixEstimate?.bestFullObservationIndex, 1);
+assert.equal(Math.round(repeatedUnsafeSuffixEstimate?.confidence), 60);
+
+const photographedScreenEstimate = inferTurkishPlateEstimate(
+    [
+        { text: 'LL GJ 3238', confidence: 52, evidenceKey: 'tight-auto' },
+        { text: 'LL GJ 3238', confidence: 58, evidenceKey: 'tight-otsu' },
+        { text: 'LL GJ 3238', confidence: 55, evidenceKey: 'tight-original' },
+        { text: '31 GJ 3235', confidence: 60, evidenceKey: 'union-auto' },
+        { text: '34 GJ JZ50', confidence: 31, evidenceKey: 'union-otsu' },
+    ],
+    [
+        { text: '31', confidence: 60, evidenceKey: 'literal-union-auto' },
+        { text: '34', confidence: 31, evidenceKey: 'literal-union-otsu' },
+        { text: '34', confidence: 59, evidenceKey: 'segmented-union-chars' },
+    ]
+);
+assert.equal(
+    photographedScreenEstimate?.normalized,
+    '34GJ3238',
+    'literal and segmented evidence from the reported camera frame should estimate 34 GJ 3238'
+);
+assert.equal(photographedScreenEstimate?.provinceEvidenceCount, 2);
+assert.equal(photographedScreenEstimate?.suffixEvidenceCount, 3);
+
+assert.equal(
+    inferTurkishPlateEstimate(
+        [
+            { text: 'LL GJ 3238', confidence: 41, evidenceKey: 'full-a' },
+            { text: 'LL GJ 3238', confidence: 47, evidenceKey: 'full-b' },
+        ],
+        []
+    ),
+    null,
+    'unsafe LL province evidence must never estimate province 11 by itself'
+);
+
+assert.equal(
+    inferTurkishPlateEstimate(
+        [
+            { text: 'LL GJ 3238', confidence: 38, evidenceKey: 'suffix-a' },
+            { text: '11 GJ 3238', confidence: 32, evidenceKey: 'suffix-b' },
+            { text: 'LL GJ 3235', confidence: 99, evidenceKey: 'suffix-c' },
+        ],
+        [
+            { text: '9934', confidence: 80, evidenceKey: 'province-a' },
+        ]
+    )?.normalized,
+    '34GJ3238',
+    'two agreeing suffix observations must beat one conflicting suffix'
+);
+
+for (const invalidFullObservations of [
+    [
+        { text: '34 QJ 3238', confidence: 90, evidenceKey: 'a' },
+        { text: '34 QJ 3238', confidence: 90, evidenceKey: 'b' },
+    ],
+    [
+        { text: '34 GW 3238', confidence: 90, evidenceKey: 'a' },
+        { text: '34 GX 3238', confidence: 90, evidenceKey: 'b' },
+    ],
+    [
+        { text: '34 GJ 12345', confidence: 90, evidenceKey: 'a' },
+        { text: '34 GJ 12345', confidence: 90, evidenceKey: 'b' },
+    ],
+    [
+        { text: null, confidence: 90, evidenceKey: 'a' },
+        { text: '', confidence: 90, evidenceKey: 'b' },
+    ],
+]) {
+    assert.equal(
+        inferTurkishPlateEstimate(
+            invalidFullObservations,
+            [{ text: '34', confidence: 90, evidenceKey: 'province-a' }]
+        ),
+        null
+    );
+}
+
+for (const invalidProvinceText of ['00', '82', 'Q4', null]) {
+    assert.equal(
+        inferTurkishPlateEstimate(
+            [
+                { text: 'LL GJ 3238', confidence: 40, evidenceKey: 'full-a' },
+                { text: 'LL GJ 3238', confidence: 42, evidenceKey: 'full-b' },
+            ],
+            [
+                {
+                    text: invalidProvinceText,
+                    confidence: 90,
+                    evidenceKey: 'province-a',
+                },
+            ]
+        ),
+        null
+    );
+}
+
+assert.equal(
+    inferTurkishPlateEstimate(
+        [
+            { text: 'LL GJ 3238', confidence: 40, evidenceKey: 'full-a' },
+            { text: 'LL GJ 3238', confidence: 42, evidenceKey: 'full-b' },
+        ],
+        [
+            { text: '34', confidence: 60, evidenceKey: 'province-a' },
+            { text: '35', confidence: 65, evidenceKey: 'province-b' },
+        ]
+    ),
+    null,
+    'equally supported province choices within eight confidence points are ambiguous'
+);
+
+assert.equal(
+    inferTurkishPlateEstimate(
+        [
+            { text: 'LL GJ 3238', confidence: 40, evidenceKey: 'suffix-a' },
+            { text: 'LL GJ 3238', confidence: 42, evidenceKey: 'suffix-b' },
+            { text: 'LL GJ 3235', confidence: 43, evidenceKey: 'suffix-c' },
+            { text: 'LL GJ 3235', confidence: 45, evidenceKey: 'suffix-d' },
+        ],
+        [
+            { text: '34', confidence: 90, evidenceKey: 'province-a' },
+        ]
+    ),
+    null,
+    'equally supported suffix choices within eight confidence points are ambiguous'
+);
+
+assert.equal(
+    inferTurkishPlateEstimate(
+        [
+            { text: 'LL GJ 3238', confidence: 40, evidenceKey: 'duplicate' },
+            { text: 'LL GJ 3238', confidence: 90, evidenceKey: 'duplicate' },
+        ],
+        [
+            { text: '34', confidence: 90, evidenceKey: 'province-a' },
+        ]
+    ),
+    null,
+    'a repeated evidence key must not create two suffix votes'
+);
+
+const deduplicatedEstimate = inferTurkishPlateEstimate(
+    [
+        { text: 'LL GJ 3238', confidence: 40, evidenceKey: 'suffix-a' },
+        { text: 'LL GJ 3238', confidence: 80, evidenceKey: 'suffix-a' },
+        { text: '11 GJ 3238', confidence: 45, evidenceKey: 'suffix-b' },
+    ],
+    [
+        { text: '34', confidence: 80, evidenceKey: 'province-a' },
+        { text: '34', confidence: 95, evidenceKey: 'province-a' },
+    ]
+);
+assert.equal(deduplicatedEstimate?.normalized, '34GJ3238');
+assert.equal(deduplicatedEstimate?.suffixEvidenceCount, 2);
+assert.equal(deduplicatedEstimate?.provinceEvidenceCount, 1);
 
 assert.deepEqual(
     matchRegisteredPlate('34 E2S 794', ['34EZS794', '34KM4969']),

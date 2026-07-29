@@ -300,6 +300,9 @@ def normalize_turkish_ocr_plate(value):
     source = value.upper()
     if any(character in source for character in "ÇĞİÖŞÜ"):
         return None
+    ocr_tokens = re.findall(r"[A-Z0-9]+", source)
+    if len(ocr_tokens) > 1 and len(ocr_tokens[0]) == 1:
+        return None
     clean = re.sub(r"[\s\-_.]", "", source)
     to_digit = {
         "O": "0",
@@ -347,6 +350,11 @@ def normalize_turkish_ocr_plate(value):
         letters = convert(clean[2:2 + letter_count], "letter")
         digits = convert(clean[2 + letter_count:], "digit")
         if not province or not letters or not digits:
+            continue
+
+        # A province inferred entirely from letter-to-digit substitutions is
+        # too ambiguous to trust (for example, "LL" must not become "11").
+        if province[1] > 1:
             continue
 
         correction_count = province[1] + letters[1] + digits[1]

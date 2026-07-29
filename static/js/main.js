@@ -7,6 +7,8 @@
 document.addEventListener('DOMContentLoaded', () => {
     const {
         parseTurkishPlate,
+        hasSafeProvinceEvidenceForStrictAutoAcceptance,
+        inferTurkishPlateEstimate,
         resolvePlateForForm,
         matchRegisteredPlate,
         mapOverlayToVideoSource,
@@ -184,6 +186,21 @@ document.addEventListener('DOMContentLoaded', () => {
     const OCR_MIN_CONFIDENCE = 45;
     const OCR_CONSENSUS_MIN_CONFIDENCE = 28;
     const OCR_STRONG_CONFIDENCE = 82;
+    const OCR_GENERAL_PARAMETERS = Object.freeze({
+        tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 ',
+        tessedit_pageseg_mode: '7',
+        preserve_interword_spaces: '1'
+    });
+    const OCR_PROVINCE_PARAMETERS = Object.freeze({
+        tessedit_char_whitelist: '0123456789',
+        tessedit_pageseg_mode: '8',
+        preserve_interword_spaces: '0'
+    });
+    const OCR_PROVINCE_CHARACTER_PARAMETERS = Object.freeze({
+        tessedit_char_whitelist: '0123456789',
+        tessedit_pageseg_mode: '10',
+        preserve_interword_spaces: '0'
+    });
     const GEMINI_TIMEOUT_MS = 12000;
     const TESSERACT_STAGE_TIMEOUT_MS = 8000;
     const DETECTION_MAX_WIDTH = 520;
@@ -216,11 +233,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     logger: message => {}
                 });
 
-                await worker.setParameters({
-                    tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 ',
-                    tessedit_pageseg_mode: Tesseract.PSM.SINGLE_LINE,
-                    preserve_interword_spaces: '1'
-                });
+                await worker.setParameters(OCR_GENERAL_PARAMETERS);
 
                 ocrWorker = worker;
                 return worker;
@@ -533,6 +546,85 @@ document.addEventListener('DOMContentLoaded', () => {
         return selected;
     }
 
+    function buildEstimateOnlyUnionCrop(
+        candidates,
+        {
+            detectionWidth,
+            detectionHeight,
+            sourceWidth,
+            sourceHeight,
+        }
+    ) {
+        const anchor = candidates?.[0];
+        if (!anchor) {
+            return null;
+        }
+
+        const neighbours = Array.from(candidates || []).slice(1)
+            .map(candidate => {
+                const minimumHeight = Math.min(anchor.h, candidate.h);
+                const verticalOverlap = Math.max(
+                    0,
+                    Math.min(anchor.y + anchor.h, candidate.y + candidate.h)
+                    - Math.max(anchor.y, candidate.y)
+                );
+                const x = Math.min(anchor.x, candidate.x);
+                const right = Math.max(
+                    anchor.x + anchor.w,
+                    candidate.x + candidate.w
+                );
+                const width = right - x;
+                const uniqueWidth = width - Math.max(anchor.w, candidate.w);
+                return {
+                    candidate,
+                    verticalOverlapRatio: verticalOverlap / Math.max(1, minimumHeight),
+                    x,
+                    width,
+                    uniqueWidth,
+                };
+            })
+            .filter(entry => (
+                entry.verticalOverlapRatio >= 0.58
+                && entry.uniqueWidth >= Math.min(anchor.w, entry.candidate.w) * 0.12
+                && entry.width / anchor.h >= 2.4
+                && entry.width / anchor.h <= 9.5
+                && entry.width <= detectionWidth * 0.92
+            ))
+            .sort((left, right) => (
+                right.width - left.width
+                || Number(right.candidate.ocrScore ?? right.candidate.score)
+                    - Number(left.candidate.ocrScore ?? left.candidate.score)
+            ));
+
+        const neighbour = neighbours[0];
+        if (!neighbour) {
+            return null;
+        }
+
+        const mapped = mapPlateCandidatesToSource(
+            [{
+                x: neighbour.x,
+                y: anchor.y,
+                w: neighbour.width,
+                h: anchor.h,
+                score: Math.max(
+                    Number(anchor.ocrScore ?? anchor.score) || 0,
+                    Number(neighbour.candidate.ocrScore ?? neighbour.candidate.score) || 0
+                ),
+            }],
+            {
+                detectionWidth,
+                detectionHeight,
+                sourceWidth,
+                sourceHeight,
+                horizontalPadding: 0,
+                verticalPadding: 0,
+            }
+        )[0];
+
+        return mapped ? { ...mapped, estimateOnly: true } : null;
+    }
+
     function buildOcrCropRegions(
         video,
         preferredDetection = null,
@@ -584,11 +676,27 @@ document.addEventListener('DOMContentLoaded', () => {
             objectPosition: computedStyle.objectPosition
         });
         const fallbackCrops = buildVerticalScanCrops(fallbackCrop, sourceHeight);
-        const sourceCrops = orderOcrCropRegions(
+        const orderedCrops = orderOcrCropRegions(
             automaticCrops,
             fallbackCrops,
             { automatic }
         );
+        const estimateOnlyUnionCrop = buildEstimateOnlyUnionCrop(
+            detection.candidates,
+            {
+                detectionWidth: detection.width,
+                detectionHeight: detection.height,
+                sourceWidth,
+                sourceHeight,
+            }
+        );
+        const sourceCrops = estimateOnlyUnionCrop
+            ? [
+                ...orderedCrops.slice(0, 2),
+                estimateOnlyUnionCrop,
+                ...orderedCrops.slice(2),
+            ]
+            : orderedCrops;
 
         return { detection, sourceCrops };
     }
@@ -818,7 +926,14 @@ document.addEventListener('DOMContentLoaded', () => {
     async function requestServerOcr(cropCaptures) {
         const abortController = new AbortController();
         const timeoutId = setTimeout(() => abortController.abort(), GEMINI_TIMEOUT_MS);
-        const serverCandidates = cropCaptures.slice(0, 3);
+        const serverCandidateEntries = cropCaptures
+            .map((capture, captureIndex) => ({ capture, captureIndex }))
+            .filter(entry => !entry.capture.sourceCrop?.estimateOnly)
+            .slice(0, 3);
+        const serverCandidates = serverCandidateEntries.map(entry => entry.capture);
+        if (!serverCandidates.length) {
+            return null;
+        }
 
         try {
             const response = await fetch('/api/gemini-ocr', {
@@ -837,10 +952,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 const plate = parseTurkishPlate(data.plate);
                 if (!plate) return null;
 
-                const candidateIndex = Number.isInteger(data.candidate_index)
+                const serverCandidateIndex = Number.isInteger(data.candidate_index)
                     ? Math.max(0, Math.min(serverCandidates.length - 1, data.candidate_index))
                     : 0;
-                return { plate, candidateIndex };
+                return {
+                    plate,
+                    candidateIndex: serverCandidateEntries[serverCandidateIndex].captureIndex,
+                };
             }
 
             if (response.status === 401) {
@@ -859,6 +977,330 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    function extractLiteralProvinceToken(value) {
+        const source = String(value || '').toUpperCase();
+        const pattern = /(?:^|[^A-Z0-9])(\d{2})(?!\d)/g;
+        let match;
+
+        while ((match = pattern.exec(source)) !== null) {
+            const provinceCode = Number(match[1]);
+            if (provinceCode >= 1 && provinceCode <= 81) {
+                return match[1];
+            }
+        }
+        return null;
+    }
+
+    function buildProvinceObservationsFromFullOcr(fullObservations) {
+        const suffixVotes = new Map();
+        for (const observation of fullObservations) {
+            const parsed = parseTurkishPlate(observation.text);
+            if (!parsed) continue;
+
+            const suffixKey = `${parsed.letters}|${parsed.digits}`;
+            const evidenceKeys = suffixVotes.get(suffixKey) || new Set();
+            evidenceKeys.add(observation.evidenceKey);
+            suffixVotes.set(suffixKey, evidenceKeys);
+        }
+
+        const rankedSuffixes = Array.from(suffixVotes.entries())
+            .sort((left, right) => right[1].size - left[1].size);
+        const dominantSuffix = (
+            rankedSuffixes[0]
+            && rankedSuffixes[0][1].size >= 2
+            && (
+                !rankedSuffixes[1]
+                || rankedSuffixes[0][1].size > rankedSuffixes[1][1].size
+            )
+        )
+            ? rankedSuffixes[0][0]
+            : null;
+
+        return fullObservations.flatMap(observation => {
+            const provinceText = extractLiteralProvinceToken(observation.text);
+            if (!provinceText) {
+                return [];
+            }
+
+            const parsed = parseTurkishPlate(observation.text);
+            const suffixKey = parsed ? `${parsed.letters}|${parsed.digits}` : null;
+            if (
+                dominantSuffix
+                && suffixKey
+                && suffixKey !== dominantSuffix
+                && !parsed.ocrCorrected
+            ) {
+                return [];
+            }
+
+            return [{
+                text: provinceText,
+                confidence: observation.confidence,
+                evidenceKey: `literal-province:${observation.evidenceKey}`,
+            }];
+        });
+    }
+
+    function captureHorizontalOcrSegment(capture, startRatio, endRatio) {
+        const sourceCanvas = document.createElement('canvas');
+        sourceCanvas.width = capture.canvas.width;
+        sourceCanvas.height = capture.canvas.height;
+        sourceCanvas
+            .getContext('2d')
+            .putImageData(capture.originalImageData, 0, 0);
+
+        const startX = Math.max(
+            0,
+            Math.min(sourceCanvas.width - 1, Math.floor(sourceCanvas.width * startRatio))
+        );
+        const endX = Math.max(
+            startX + 1,
+            Math.min(sourceCanvas.width, Math.ceil(sourceCanvas.width * endRatio))
+        );
+        const canvas = document.createElement('canvas');
+        canvas.width = endX - startX;
+        canvas.height = sourceCanvas.height;
+        const ctx = canvas.getContext('2d', { willReadFrequently: true });
+        if (!ctx) {
+            throw new Error('İl kodu OCR görüntüsü hazırlanamadı.');
+        }
+        ctx.drawImage(
+            sourceCanvas,
+            startX,
+            0,
+            endX - startX,
+            sourceCanvas.height,
+            0,
+            0,
+            canvas.width,
+            canvas.height
+        );
+
+        return {
+            canvas,
+            ctx,
+            originalImageData: ctx.getImageData(0, 0, canvas.width, canvas.height),
+        };
+    }
+
+    function capturePaddedOcrCharacter(capture, rectangle) {
+        const sourceCanvas = document.createElement('canvas');
+        sourceCanvas.width = capture.canvas.width;
+        sourceCanvas.height = capture.canvas.height;
+        sourceCanvas
+            .getContext('2d')
+            .putImageData(capture.originalImageData, 0, 0);
+
+        const sourceX = Math.max(
+            0,
+            Math.floor(sourceCanvas.width * rectangle.x)
+        );
+        const sourceY = Math.max(
+            0,
+            Math.floor(sourceCanvas.height * rectangle.y)
+        );
+        const sourceWidth = Math.max(
+            1,
+            Math.min(
+                sourceCanvas.width - sourceX,
+                Math.ceil(sourceCanvas.width * rectangle.w)
+            )
+        );
+        const sourceHeight = Math.max(
+            1,
+            Math.min(
+                sourceCanvas.height - sourceY,
+                Math.ceil(sourceCanvas.height * rectangle.h)
+            )
+        );
+        const paddingLeft = Math.round(sourceWidth * 0.125);
+        const paddingRight = Math.round(sourceWidth * 0.125);
+        const paddingTop = Math.round(sourceHeight * 0.14);
+        const paddingBottom = Math.round(sourceHeight * 0.12);
+        const canvas = document.createElement('canvas');
+        canvas.width = sourceWidth + paddingLeft + paddingRight;
+        canvas.height = sourceHeight + paddingTop + paddingBottom;
+        const ctx = canvas.getContext('2d', { willReadFrequently: true });
+        if (!ctx) {
+            throw new Error('İl kodu karakter görüntüsü hazırlanamadı.');
+        }
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(
+            sourceCanvas,
+            sourceX,
+            sourceY,
+            sourceWidth,
+            sourceHeight,
+            paddingLeft,
+            paddingTop,
+            sourceWidth,
+            sourceHeight
+        );
+        return { canvas, ctx };
+    }
+
+    async function requestProvinceSegmentObservations(
+        worker,
+        cropCaptures,
+        sessionId
+    ) {
+        const observations = [];
+        let shouldRestoreGeneralParameters = true;
+        const prioritizedCaptures = [
+            ...cropCaptures.filter(capture => capture.sourceCrop?.estimateOnly),
+            ...cropCaptures.filter(capture => !capture.sourceCrop?.estimateOnly),
+        ].slice(0, 3);
+        const stages = [
+            { name: 'AutoContrast', apply: (c, w, h) => processAutoContrast(c, w, h) },
+            { name: 'Adaptive', apply: (c, w, h) => processAdaptiveThreshold(c, w, h) },
+            { name: 'Otsu', apply: (c, w, h) => processOtsuThreshold(c, w, h) },
+            { name: 'Original', apply: () => {} },
+        ];
+
+        try {
+            const estimateOnlyCapture = prioritizedCaptures.find(
+                capture => capture.sourceCrop?.estimateOnly
+            );
+            if (estimateOnlyCapture) {
+                await worker.setParameters(OCR_PROVINCE_CHARACTER_PARAMETERS);
+                const provinceCharacterRectangles = [
+                    { x: 0.0555, y: 0, w: 0.1268, h: 0.8958 },
+                    { x: 0.1680, y: 0, w: 0.1387, h: 0.9042 },
+                ];
+                const provinceCharacters = [];
+                const characterConfidences = [];
+                for (
+                    let characterIndex = 0;
+                    characterIndex < provinceCharacterRectangles.length;
+                    characterIndex += 1
+                ) {
+                    const characterCapture = capturePaddedOcrCharacter(
+                        estimateOnlyCapture,
+                        provinceCharacterRectangles[characterIndex]
+                    );
+                    triggerOcrBtn.textContent =
+                        `⏳ İl kodu karakteri okunuyor: ${characterIndex + 1}/2`;
+                    const result = await recognizeWithTimeout(
+                        worker,
+                        characterCapture.canvas,
+                        TESSERACT_STAGE_TIMEOUT_MS
+                    );
+                    if (sessionId !== ocrSessionId) {
+                        return observations;
+                    }
+                    const character = String(result.data.text || '').match(/\d/)?.[0];
+                    if (!character) {
+                        provinceCharacters.length = 0;
+                        break;
+                    }
+                    provinceCharacters.push(character);
+                    characterConfidences.push(Number(result.data.confidence) || 0);
+                }
+                if (provinceCharacters.length === 2) {
+                    const provinceText = provinceCharacters.join('');
+                    observations.push({
+                        text: provinceText,
+                        confidence: characterConfidences.reduce(
+                            (total, confidence) => total + confidence,
+                            0
+                        ) / characterConfidences.length,
+                        evidenceKey: 'province-characters:estimate-union',
+                    });
+                    const provinceCode = Number(provinceText);
+                    if (provinceCode >= 1 && provinceCode <= 81) {
+                        return observations;
+                    }
+                }
+            }
+
+            await worker.setParameters(OCR_PROVINCE_PARAMETERS);
+            for (
+                let captureIndex = 0;
+                captureIndex < prioritizedCaptures.length;
+                captureIndex += 1
+            ) {
+                for (const stage of stages) {
+                    if (sessionId !== ocrSessionId) {
+                        return observations;
+                    }
+
+                    const segment = captureHorizontalOcrSegment(
+                        prioritizedCaptures[captureIndex],
+                        0,
+                        0.42
+                    );
+                    stage.apply(
+                        segment.ctx,
+                        segment.canvas.width,
+                        segment.canvas.height
+                    );
+                    triggerOcrBtn.textContent =
+                        `⏳ İl kodu tahmin ediliyor: ${captureIndex + 1}/${prioritizedCaptures.length}`;
+                    const result = await recognizeWithTimeout(
+                        worker,
+                        segment.canvas,
+                        TESSERACT_STAGE_TIMEOUT_MS
+                    );
+                    const digits = String(result.data.text || '').replace(/\D/g, '');
+                    if (digits.length >= 2) {
+                        observations.push({
+                            text: digits,
+                            confidence: Number(result.data.confidence) || 0,
+                            evidenceKey: `province-segment:${captureIndex}:${stage.name}`,
+                        });
+                    }
+                }
+            }
+        } catch (error) {
+            if (
+                error instanceof OcrTimeoutError
+                || error.name === 'OcrTimeoutError'
+            ) {
+                // The outer OCR handler terminates this worker. Queueing
+                // setParameters behind a stuck recognition would hide the timeout.
+                shouldRestoreGeneralParameters = false;
+            }
+            throw error;
+        } finally {
+            if (shouldRestoreGeneralParameters) {
+                await worker.setParameters(OCR_GENERAL_PARAMETERS);
+            }
+        }
+
+        return observations;
+    }
+
+    function buildTentativeOcrMatch(estimate, fullObservations) {
+        const observation = (
+            fullObservations[estimate.bestFullObservationIndex]
+            || fullObservations[0]
+        );
+        if (!observation) {
+            return null;
+        }
+
+        return {
+            text: estimate.normalized,
+            confidence: estimate.confidence,
+            corrected: false,
+            estimated: true,
+            requiresConfirmation: true,
+            consensus: estimate.suffixEvidenceCount,
+            parts: [
+                estimate.provinceCode.toString().padStart(2, '0'),
+                estimate.letters,
+                estimate.digits,
+            ],
+            canvasContext: observation.canvasContext,
+            originalCanvasContext: observation.originalCanvasContext,
+            canvasW: observation.canvasW,
+            canvasH: observation.canvasH,
+            cropIndex: observation.cropIndex,
+            stage: observation.stage,
+        };
+    }
+
     async function requestLocalOcr(cropCaptures, sessionId) {
         triggerOcrBtn.textContent = '⏳ Yerel OCR hazırlanıyor...';
         const worker = await ensureOcrWorker();
@@ -866,6 +1308,7 @@ document.addEventListener('DOMContentLoaded', () => {
             .map(option => option.dataset.plate || option.value);
         const candidates = [];
         const votes = new Map();
+        const fullObservations = [];
         const stages = [
             { name: 'AutoContrast', apply: (c, w, h) => processAutoContrast(c, w, h) },
             { name: 'Adaptive', apply: (c, w, h) => processAdaptiveThreshold(c, w, h) },
@@ -893,6 +1336,23 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 const recognizedText = result.data.text || '';
                 const confidence = Number(result.data.confidence) || 0;
+                const stageImageData = ctx.getImageData(
+                    0,
+                    0,
+                    canvas.width,
+                    canvas.height
+                );
+                fullObservations.push({
+                    text: recognizedText,
+                    confidence,
+                    evidenceKey: `full:${cropIndex}:${stage.name}`,
+                    canvasContext: stageImageData,
+                    originalCanvasContext: originalImageData,
+                    canvasW: canvas.width,
+                    canvasH: canvas.height,
+                    cropIndex,
+                    stage: stage.name,
+                });
                 const normalizedRecognizedText = String(recognizedText).toUpperCase();
                 const recognizedCompact = /[ÇĞİÖŞÜ]/.test(normalizedRecognizedText)
                     ? ''
@@ -904,8 +1364,11 @@ document.addEventListener('DOMContentLoaded', () => {
                     )?.normalized.length === recognizedCompact.length
                 ));
                 const registeredMatch = (
+                    !capture.sourceCrop?.estimateOnly
+                    && (
                     recognizedCompact.length === 7
                     || recognizedCompact.length === 8
+                    )
                 )
                     ? matchRegisteredPlate(
                         recognizedText,
@@ -915,9 +1378,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 const parsed = registeredMatch
                     ? parseTurkishPlate(registeredMatch.normalized)
                     : parseTurkishPlate(recognizedText);
+                const hasSafeProvinceEvidence = (
+                    hasSafeProvinceEvidenceForStrictAutoAcceptance(parsed)
+                );
 
                 if (
-                    parsed
+                    !capture.sourceCrop?.estimateOnly
+                    && parsed
+                    && hasSafeProvinceEvidence
                     && (
                         confidence >= OCR_CONSENSUS_MIN_CONFIDENCE
                         || registeredMatch
@@ -936,7 +1404,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             parsed.letters,
                             parsed.digits
                         ],
-                        canvasContext: ctx.getImageData(0, 0, canvas.width, canvas.height),
+                        canvasContext: stageImageData,
                         originalCanvasContext: originalImageData,
                         canvasW: canvas.width,
                         canvasH: canvas.height,
@@ -998,19 +1466,48 @@ document.addEventListener('DOMContentLoaded', () => {
             );
         });
         const best = candidates[0] || null;
-        if (!best) {
-            return null;
+        if (best) {
+            const bestVote = votes.get(best.text);
+            if (
+                best.registered
+                || best.confidence >= OCR_MIN_CONFIDENCE
+                || shouldAcceptOcrConsensus(bestVote)
+            ) {
+                return { ...best, consensus: bestVote?.count || 1 };
+            }
         }
 
-        const bestVote = votes.get(best.text);
-        if (
-            best.registered
-            || best.confidence >= OCR_MIN_CONFIDENCE
-            || shouldAcceptOcrConsensus(bestVote)
-        ) {
-            return { ...best, consensus: bestVote?.count || 1 };
+        let provinceObservations = buildProvinceObservationsFromFullOcr(
+            fullObservations
+        );
+        let estimate = inferTurkishPlateEstimate(
+            fullObservations,
+            provinceObservations
+        );
+        if (!estimate || estimate.provinceEvidenceCount < 2) {
+            const segmentedProvinceObservations = (
+                await requestProvinceSegmentObservations(
+                    worker,
+                    cropCaptures,
+                    sessionId
+                )
+            );
+            if (sessionId !== ocrSessionId) {
+                return null;
+            }
+            provinceObservations = [
+                ...provinceObservations,
+                ...segmentedProvinceObservations,
+            ];
+            estimate = inferTurkishPlateEstimate(
+                fullObservations,
+                provinceObservations
+            );
         }
-        return null;
+
+        return estimate
+            ? buildTentativeOcrMatch(estimate, fullObservations)
+            : null;
     }
 
     function showOcrResult(bestMatch, source) {
@@ -1030,7 +1527,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
         ocrResultText.textContent = bestMatch.parts.join(' ');
 
-        if (source === 'gemini') {
+        if (bestMatch.estimated) {
+            ocrConfidence.textContent =
+                '⚠️ Tahmini okuma • Onaylamadan önce kontrol edin.';
+            ocrConfidence.style.color = '#facc15';
+        } else if (source === 'gemini') {
             ocrConfidence.textContent = 'Sunucu OCR sonucu';
             ocrConfidence.style.color = '#4ade80';
         } else {
@@ -1046,7 +1547,9 @@ document.addEventListener('DOMContentLoaded', () => {
             ocrConfidence.style.color = bestMatch.confidence > 80 ? '#4ade80' : '#facc15';
         }
 
-        const currentMatchedOption = findRegisteredPlateOption(currentOcrPlate);
+        const currentMatchedOption = bestMatch.estimated
+            ? resolveOcrPlate(currentOcrPlate)?.option || null
+            : findRegisteredPlateOption(currentOcrPlate);
         if (currentMatchedOption) {
             currentOcrPlate = currentMatchedOption.value;
             ocrDbStatus.textContent = '✅ Sistemde Bulundu';
@@ -1060,7 +1563,13 @@ document.addEventListener('DOMContentLoaded', () => {
             ocrConfirmBtn.style.opacity = '1';
         }
 
-        ocrManualEditContainer.classList.add('hidden');
+        if (bestMatch.estimated) {
+            ocrManualEditContainer.classList.remove('hidden');
+            ocrManualInput.value = bestMatch.parts.join(' ');
+            validateManualInput();
+        } else {
+            ocrManualEditContainer.classList.add('hidden');
+        }
         ocrConfirmModal.classList.remove('hidden');
     }
 
@@ -1179,7 +1688,12 @@ document.addEventListener('DOMContentLoaded', () => {
             if (sessionId !== ocrSessionId) return false;
             if (bestMatch) {
                 hideDetectionOverlay();
-                setAutoScanStatus('Plaka otomatik okundu; sonucu onaylayın.', 'success');
+                setAutoScanStatus(
+                    bestMatch.estimated
+                        ? 'Tahmini plaka bulundu; lütfen kontrol edin.'
+                        : 'Plaka otomatik okundu; sonucu onaylayın.',
+                    bestMatch.estimated ? 'found' : 'success'
+                );
                 showOcrResult(bestMatch, source);
                 succeeded = true;
             } else {

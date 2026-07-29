@@ -87,6 +87,7 @@ class OcrApiTests(unittest.TestCase):
             "35 VEB OO1": "35VEB001",
             "35 VEB 00I": "35VEB001",
             "O6 A 12345": "06A12345",
+            "11 GJ 3238": "11GJ3238",
             "36A0Q348": "36A00348",
         }
         for raw, expected in cases.items():
@@ -98,6 +99,8 @@ class OcrApiTests(unittest.TestCase):
 
         for ambiguous_or_invalid in (
             "99 ABC 1234",
+            "LL GJ 3238",
+            "3 GJ 3235",
             "77G5Z33",
             "46C1S05",
         ):
