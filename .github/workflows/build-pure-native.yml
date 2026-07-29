@@ -5,37 +5,49 @@ on:
   push:
     paths:
       - 'android-native/**'
+      - '.github/workflows/build-pure-native.yml'
+
+permissions:
+  contents: write
 
 jobs:
   build-native:
     runs-on: ubuntu-latest
     
     steps:
-      - name: 📥 Kodu İndir
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: ☕ Java Kurulumu
+      - name: Setup Java
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: 📦 Gradle ile APK Derle
-        working-directory: ./android-native
-        run: |
-          (gradle wrapper --gradle-version 8.4 && ./gradlew assembleDebug --stacktrace) > build_log.txt 2>&1 || { cat build_log.txt; exit 1; }
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-version: '8.4'
 
-      - name: 🚀 APK'yı Yükle
+      - name: Build APK
+        working-directory: android-native
+        run: gradle assembleDebug --stacktrace > build_log.txt 2>&1 || true
+
+      - name: Push Logs
+        if: always()
+        run: |
+          git config --global user.name "Log Bot"
+          git config --global user.email "bot@example.com"
+          git checkout -B debug-logs-build-pure-native
+          cp android-native/build_log.txt ./build_log_build-pure-native.txt || true
+          git add build_log_build-pure-native.txt
+          git commit -m "Logs" || true
+          git push origin debug-logs-build-pure-native -f
+
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: Plaka-Sistemi-Native-APK
           path: android-native/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
           retention-days: 30
-
-      - name: Upload Error Log
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: Error-Log-build-pure-native.yml
-          path: android-native/build_log.txt
-          retention-days: 1
