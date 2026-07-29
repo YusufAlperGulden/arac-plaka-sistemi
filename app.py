@@ -19,9 +19,9 @@ except ImportError:
 
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
 GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.5-flash-lite")
-MAX_OCR_IMAGE_BYTES = 2 * 1024 * 1024
+MAX_OCR_IMAGE_BYTES = 20 * 1024 * 1024
 MAX_OCR_IMAGES = 3
-MAX_OCR_TOTAL_BYTES = 2 * 1024 * 1024
+MAX_OCR_TOTAL_BYTES = 20 * 1024 * 1024
 MAX_OCR_TOTAL_PIXELS = 20_000_000
 ALLOWED_IMAGE_FORMATS = {
     "JPEG": "image/jpeg",
@@ -52,7 +52,7 @@ app.config.update(
     ).lower() not in {"0", "false", "no"},
     SESSION_COOKIE_SAMESITE="Lax",
     PERMANENT_SESSION_LIFETIME=1800,
-    MAX_CONTENT_LENGTH=3 * 1024 * 1024,
+    MAX_CONTENT_LENGTH=20 * 1024 * 1024,
 )
 
 # Trust 1 proxy (Render)
