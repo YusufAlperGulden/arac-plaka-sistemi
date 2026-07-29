@@ -9,7 +9,7 @@ on:
       - ".github/workflows/build-apk.yml"
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build-android:
@@ -32,7 +32,18 @@ jobs:
           
       - name: Build APK
         working-directory: android-app
-        run: gradle assembleDebug --stacktrace
+        run: gradle assembleDebug --stacktrace > build_log.txt 2>&1 || true
+
+      - name: Push Logs
+        if: always()
+        run: |
+          git config --global user.name "Log Bot"
+          git config --global user.email "bot@example.com"
+          git checkout -B debug-logs-build-apk
+          cp android-app/build_log.txt ./build_log_build-apk.txt || true
+          git add build_log_build-apk.txt
+          git commit -m "Logs" || true
+          git push origin debug-logs-build-apk -f
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
