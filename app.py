@@ -3,6 +3,11 @@ import time
 from datetime import datetime
 import os
 import base64
+import io
+from PIL import Image
+from werkzeug.middleware.proxy_fix import ProxyFix
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 try:
     import google.generativeai as genai
     GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
@@ -17,9 +22,28 @@ except ImportError:
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'super-secret-key-123')
 
-RATE_LIMITS = {}
-RATE_LIMIT_WINDOW = 60 # 60 seconds
-MAX_REQUESTS_PER_WINDOW = 5
+# Security Settings
+app.config.update(
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SECURE=True,
+    SESSION_COOKIE_SAMESITE="Lax",
+    PERMANENT_SESSION_LIFETIME=1800,
+)
+
+# Trust 1 proxy (Render)
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
+
+# Rate Limiter
+def get_rate_limit_key():
+    return session.get('user', get_remote_address())
+
+limiter = Limiter(
+    get_remote_address,
+    app=app,
+    default_limits=["200 per day", "50 per hour"],
+    storage_uri="memory://",
+)
+
 
 USERS_DB = {
     "Teknopalas": "123456",
@@ -119,6 +143,7 @@ def login():
     password = data.get('password')
     
     if username in USERS_DB and USERS_DB[username] == password:
+        session.clear() # Fixation koruması
         session['user'] = username
         return jsonify({"success": True, "message": "Giriş başarılı."}), 200
     else:

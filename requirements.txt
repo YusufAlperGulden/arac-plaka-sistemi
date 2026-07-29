@@ -2,3 +2,6 @@ Flask==3.0.0
 gunicorn==21.2.0
 google-generativeai
 Pillow
+
+Flask-Limiter==3.7.0
+Pillow==10.3.0

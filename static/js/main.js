@@ -529,11 +529,24 @@ document.addEventListener('DOMContentLoaded', () => {
                         } else {
                             console.warn("Gemini API HTTP Hata:", response.status);
                             if (response.status === 401) {
-                                window.showToast('Oturum süresi doldu. Lütfen tekrar giriş yapın.', 'error');
-                                setTimeout(() => window.location.reload(), 2000);
-                                throw new Error("Unauthorized"); // Skip to fallback or abort
+                                window.showToast('Oturumunuz sona erdi. Lütfen tekrar giriş yapın.', 'error');
+                                
+                                // Güvenli 401 Akışı: OCR'ı durdur, state'i temizle ve Login'e dön
+                                invalidateOcrSession();
+                                if (triggerOcrBtn) {
+                                    triggerOcrBtn.textContent = "📷 Plakayı Oku";
+                                    triggerOcrBtn.disabled = false;
+                                }
+                                isOcrProcessing = false;
+                                closeCameraSafely();
+                                document.getElementById('camera-modal').classList.remove('active');
+                                showSection('login-section');
+                                
+                                throw new Error("Unauthorized");
                             } else if (response.status === 429) {
-                                window.showToast('Çok fazla istek yapıldı. Yerel OCR devreye giriyor.', 'error');
+                                const retryAfter = response.headers.get('Retry-After');
+                                const retryMsg = retryAfter ? ` Lütfen ${retryAfter} sn bekleyin.` : '';
+                                window.showToast('Gemini API sınırına ulaşıldı.' + retryMsg + ' Yerel OCR kullanılıyor.', 'warning');
                             }
                         }
                     } catch (err) {
