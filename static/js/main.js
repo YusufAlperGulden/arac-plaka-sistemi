@@ -1881,29 +1881,12 @@ document.addEventListener('DOMContentLoaded', () => {
             showDetectionOverlay(video, detection, candidate, stable);
             setAutoScanStatus(
                 stable
-                    ? 'Plaka bulundu; otomatik okunuyor…'
+                    ? 'Plaka hizalandı. Okutmak için "Şimdi Tara" düğmesine basın.'
                     : 'Plaka bulundu; kısa süre sabit tutun.',
                 stable ? 'success' : 'found'
             );
 
-            if (stable) {
-                const succeeded = await performPlateOcr({
-                    preferredDetection: {
-                        ...detection,
-                        preferredCandidate: candidate,
-                    },
-                    automatic: true,
-                });
-                if (succeeded) {
-                    return;
-                }
-                // Bekleme süresini uzun OCR işlemi bittikten sonra başlat.
-                // Aynı aday kısa süre bekletilir; başka bir bölgedeki adaylar
-                // ve manuel tarama bu bekleme süresinden etkilenmez.
-                blockAutoScanCandidate(candidate);
-                autoScanPreviousCandidate = null;
-                autoScanStableFrames = 0;
-            }
+            // OTOMATİK OCR ÇAĞRISI İPTAL EDİLDİ - Yalnızca "Şimdi Tara" ile çalışacak
         } catch (error) {
             console.warn('Otomatik plaka tespiti başarısız oldu:', error);
             hideDetectionOverlay();
