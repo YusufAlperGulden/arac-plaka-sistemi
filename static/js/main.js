@@ -183,8 +183,8 @@ document.addEventListener('DOMContentLoaded', () => {
     let isOcrProcessing = false;
     let isPlateListReady = false;
     let ocrSessionId = 0;
-    const OCR_MIN_CONFIDENCE = 45;
-    const OCR_CONSENSUS_MIN_CONFIDENCE = 28;
+    const OCR_MIN_CONFIDENCE = 15;
+    const OCR_CONSENSUS_MIN_CONFIDENCE = 10;
     const OCR_STRONG_CONFIDENCE = 82;
     const OCR_GENERAL_PARAMETERS = Object.freeze({
         tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 ',
