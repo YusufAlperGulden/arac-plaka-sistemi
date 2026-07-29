@@ -1468,13 +1468,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const best = candidates[0] || null;
         if (best) {
             const bestVote = votes.get(best.text);
-            if (
-                best.registered
-                || best.confidence >= OCR_MIN_CONFIDENCE
-                || shouldAcceptOcrConsensus(bestVote)
-            ) {
-                return { ...best, consensus: bestVote?.count || 1 };
-            }
+            return { ...best, consensus: bestVote?.count || 1 };
         }
 
         let provinceObservations = buildProvinceObservationsFromFullOcr(
@@ -1484,7 +1478,7 @@ document.addEventListener('DOMContentLoaded', () => {
             fullObservations,
             provinceObservations
         );
-        if (!estimate || estimate.provinceEvidenceCount < 2) {
+        if (!estimate) {
             const segmentedProvinceObservations = (
                 await requestProvinceSegmentObservations(
                     worker,
