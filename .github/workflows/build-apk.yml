@@ -30,11 +30,14 @@ jobs:
           yes | sdkmanager --licenses >/dev/null
           sdkmanager "platforms;android-35" "build-tools;35.0.0"
 
-      - name: Build signed internal-distribution APK
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-version: '8.4'
+          
+      - name: Build APK
         working-directory: android-app
-        run: |
-          gradle wrapper --gradle-version 8.4
-          ./gradlew assembleDebug --stacktrace > build_log.txt 2>&1 || { cat build_log.txt; exit 1; }
+        run: gradle assembleDebug --stacktrace
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
@@ -43,3 +46,11 @@ jobs:
           path: android-app/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 30
+
+      - name: Upload Error Log
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Error-Log-build-apk.yml
+          path: android-app/build_log.txt
+          retention-days: 1
