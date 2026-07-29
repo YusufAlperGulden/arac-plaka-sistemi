@@ -1,0 +1,66 @@
+name: Build Android APK (Capacitor)
+
+on:
+  workflow_dispatch:  # İstenildiği zaman manuel olarak tetiklenebilir
+  push:
+    branches: [ "main" ] # Her main commitinde otomatik oluştur
+
+jobs:
+  build-android:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: 📥 Kodu İndir
+        uses: actions/checkout@v4
+
+      - name: ⚙️ Node.js Kurulumu
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: ☕ Java JDK Kurulumu
+        uses: actions/setup-java@v3
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      - name: 🛠️ Capacitor ve Gerekli Kütüphaneleri Kur
+        run: |
+          npm init -y
+          npm install @capacitor/core @capacitor/cli @capacitor/android
+          
+          # Capacitor yapılandırma dosyası oluşturuluyor
+          cat << 'EOF' > capacitor.config.json
+          {
+            "appId": "com.teknopalas.aracplaka",
+            "appName": "Plaka Sistemi",
+            "webDir": "templates",
+            "server": {
+              "url": "https://arac-plaka-sistemi.onrender.com",
+              "cleartext": true
+            }
+          }
+          EOF
+          
+          # Android platformunu ekle
+          npx cap add android
+          npx cap sync android
+
+      - name: 📷 Android İzinlerini (Kamera/İnternet) Ekle
+        run: |
+          MANIFEST="android/app/src/main/AndroidManifest.xml"
+          # AndroidManifest içine gerekli izinleri enjekte et
+          sed -i '/<application/i \    <uses-permission android:name="android.permission.INTERNET" />\n    <uses-permission android:name="android.permission.CAMERA" />\n    <uses-feature android:name="android.hardware.camera" android:required="true" />' $MANIFEST
+
+      - name: 📦 Gradle ile APK Derle
+        working-directory: ./android
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug
+
+      - name: 🚀 APK'yı GitHub Actions'a Yükle
+        uses: actions/upload-artifact@v4
+        with:
+          name: Plaka-Sistemi-APK
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 30
