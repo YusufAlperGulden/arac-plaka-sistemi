@@ -18,22 +18,21 @@ jobs:
         with:
           node-version: '20'
 
-      - name: ☕ Java JDK Kurulumu
-        uses: actions/setup-java@v3
+      - name: ☕ Java Kurulumu
+        uses: actions/setup-java@v4
         with:
-          distribution: 'zulu'
+          distribution: 'temurin'
           java-version: '17'
 
-      - name: 🛠️ Capacitor ve Gerekli Kütüphaneleri Kur
+      - name: 🛠️ Capacitor Kurulumu
         run: |
           npm init -y
-          npm install @capacitor/core @capacitor/cli @capacitor/android
+          # Install core, android, and camera plugin to automatically inject camera permissions
+          npm install @capacitor/core @capacitor/cli @capacitor/android @capacitor/camera
           
-          # Create a dummy www folder to satisfy Capacitor
           mkdir -p www
-          echo "<html><body>Redirecting...</body></html>" > www/index.html
+          echo "<html><head><meta http-equiv='refresh' content='0; url=https://arac-plaka-sistemi.onrender.com' /></head><body>Yönlendiriliyor...</body></html>" > www/index.html
           
-          # Capacitor yapılandırma dosyası oluşturuluyor
           cat << 'EOF' > capacitor.config.json
           {
             "appId": "com.teknopalas.aracplaka",
@@ -46,39 +45,16 @@ jobs:
           }
           EOF
           
-          # Android platformunu ekle
           npx cap add android
           npx cap sync android
-
-      - name: 📷 Android İzinlerini (Kamera/İnternet) Ekle
-        run: |
-          python -c "
-          import os
-          manifest_path = 'android/app/src/main/AndroidManifest.xml'
-          if not os.path.exists(manifest_path):
-              print('Manifest not found!')
-              exit(1)
-          with open(manifest_path, 'r') as f:
-              content = f.read()
-          
-          permissions = '''    <uses-permission android:name=\"android.permission.INTERNET\" />
-              <uses-permission android:name=\"android.permission.CAMERA\" />
-              <uses-feature android:name=\"android.hardware.camera\" android:required=\"true\" />
-          '''
-          
-          content = content.replace('<application', permissions + '\n    <application')
-          with open(manifest_path, 'w') as f:
-              f.write(content)
-          print('Permissions injected.')
-          "
 
       - name: 📦 Gradle ile APK Derle
         working-directory: ./android
         run: |
           chmod +x gradlew
-          ./gradlew assembleDebug
+          ./gradlew assembleDebug --stacktrace
 
-      - name: 🚀 APK'yı GitHub Actions'a Yükle
+      - name: 🚀 APK'yı Yükle
         uses: actions/upload-artifact@v4
         with:
           name: Plaka-Sistemi-APK
