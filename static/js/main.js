@@ -78,6 +78,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const plateSelect = document.getElementById('plate-select');
     const actionTypeSelect = document.getElementById('action-type-select');
     const mileageInput = document.getElementById('mileage-input');
+    const requestNoInput = document.getElementById('request-no-input');
+    const serviceFormNoInput = document.getElementById('service-form-no-input');
     const notesInput = document.getElementById('notes-input');
     
     const processBtn = document.getElementById('process-btn');
@@ -91,6 +93,8 @@ document.addEventListener('DOMContentLoaded', () => {
         plate: null,
         actionType: null,
         mileage: null,
+        requestNo: null,
+        serviceFormNo: null,
         notes: null
     };
 
@@ -139,7 +143,14 @@ document.addEventListener('DOMContentLoaded', () => {
         state.plate = null;
         state.actionType = null;
         state.mileage = null;
+        state.requestNo = null;
+        state.serviceFormNo = null;
         state.notes = null;
+        actionTypeSelect.value = 'Diğer';
+        mileageInput.value = '';
+        requestNoInput.value = '';
+        serviceFormNoInput.value = '';
+        notesInput.value = '';
         
         dashboardTitle.textContent = title;
         
@@ -2061,8 +2072,9 @@ document.addEventListener('DOMContentLoaded', () => {
             instructionText.textContent = 'Kilometreyi okutun veya manuel olarak girin.';
             cameraOverlayText.textContent = 'Kilometreyi okutun';
             
-            manualTitle.textContent = 'Kilometre ve Açıklama';
-            manualSubtitle.textContent = `Plaka: ${state.plate} | Tip: ${state.actionType}`;
+            manualTitle.textContent = 'Kilometre ve İşlem Bilgileri';
+            manualSubtitle.textContent =
+                `Plaka: ${state.plate} | Kullanım: ${state.actionType}`;
             
             stepPlateContainer.classList.add('hidden');
             stepMileageContainer.classList.remove('hidden');
@@ -2091,6 +2103,8 @@ document.addEventListener('DOMContentLoaded', () => {
             
         } else if (state.currentStep === 2) {
             state.mileage = mileageInput.value.trim();
+            state.requestNo = requestNoInput.value.trim();
+            state.serviceFormNo = serviceFormNoInput.value.trim();
             state.notes = notesInput.value.trim();
             
             // Backend'e kaydet (ACTIVE_TRIPS / RECORDS_DB mantığı)
@@ -2105,6 +2119,8 @@ document.addEventListener('DOMContentLoaded', () => {
                         action_type: state.actionType, // 'Periyodik Bakım' vb.
                         mileage: state.mileage,
                         user: state.username,
+                        request_no: state.requestNo,
+                        service_form_no: state.serviceFormNo,
                         notes: state.notes
                     })
                 });
@@ -2113,6 +2129,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 
                 if (response.ok && result.success) {
                     window.showToast(result.message, 'success');
+                    mileageInput.value = '';
+                    requestNoInput.value = '';
+                    serviceFormNoInput.value = '';
+                    notesInput.value = '';
+                    plateSelect.value = '';
+                    processBtn.disabled = false;
+                    setTimeout(() => showActionSelection(), 2500);
                 } else {
                     window.showToast(result.message || 'Kayıt sırasında hata oluştu.', 'error');
                 }
@@ -2120,12 +2143,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 console.error("Kayıt hatası:", error);
                 window.showToast('Sunucu ile iletişim kurulamadı.', 'error');
             } finally {
-                mileageInput.value = '';
-                notesInput.value = '';
-                plateSelect.value = '';
                 processBtn.disabled = false;
-                
-                setTimeout(() => showActionSelection(), 2500);
             }
         }
     });
@@ -2135,6 +2153,7 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Rapor state
     let currentRecords = [];
+    const REPORT_COLUMN_COUNT = 13;
     const filterActionType = document.getElementById('filter-action-type');
     const globalSearch = document.getElementById('global-search');
     const sortBy = document.getElementById('sort-by');
@@ -2194,7 +2213,8 @@ document.addEventListener('DOMContentLoaded', () => {
         reportDetailSection.classList.remove('hidden');
         reportDetailSection.classList.add('active');
         
-        reportTableBody.innerHTML = '<tr><td colspan="11" style="text-align:center;">Yükleniyor...</td></tr>';
+        reportTableBody.innerHTML =
+            `<tr><td colspan="${REPORT_COLUMN_COUNT}" style="text-align:center;">Yükleniyor...</td></tr>`;
         
         // Reset filters
         filterActionType.value = 'all';
@@ -2209,12 +2229,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 currentRecords = result.records; // Veriyi kaydet
                 applyFiltersAndSort(); // Tabloyu render et
             } else {
-                reportTableBody.innerHTML = '<tr><td colspan="11" style="text-align:center; color:#ef4444;">Veriler alınamadı.</td></tr>';
+                reportTableBody.innerHTML =
+                    `<tr><td colspan="${REPORT_COLUMN_COUNT}" style="text-align:center; color:#ef4444;">Veriler alınamadı.</td></tr>`;
                 window.showToast('Raporlar alınamadı.', 'error');
             }
         } catch (error) {
             console.error("Rapor API hatası:", error);
-            reportTableBody.innerHTML = '<tr><td colspan="11" style="text-align:center; color:#ef4444;">Sunucu bağlantı hatası.</td></tr>';
+            reportTableBody.innerHTML =
+                `<tr><td colspan="${REPORT_COLUMN_COUNT}" style="text-align:center; color:#ef4444;">Sunucu bağlantı hatası.</td></tr>`;
             window.showToast('Sunucu ile iletişim kurulamadı.', 'error');
         }
     }
@@ -2238,14 +2260,18 @@ document.addEventListener('DOMContentLoaded', () => {
         // Filtreleme - Hareket Tipi
         const typeFilter = filterActionType.value;
         if (typeFilter !== 'all') {
-            filtered = filtered.filter(r => (r.action_type || '').includes(typeFilter));
+            filtered = filtered.filter(r => (r.action_type || '') === typeFilter);
         }
 
         // Filtreleme - Global Arama (Plaka, Araç, Sürücü, Not)
         const searchVal = globalSearch.value.toLowerCase().trim();
         if (searchVal !== '') {
             filtered = filtered.filter(r => {
-                const combinedString = `${r.plate || ''} ${r.vehicle_name || ''} ${r.driver || ''} ${r.notes || ''}`.toLowerCase();
+                const combinedString = (
+                    `${r.plate || ''} ${r.vehicle_name || ''} `
+                    + `${r.driver || ''} ${r.request_no || ''} `
+                    + `${r.service_form_no || ''} ${r.notes || ''}`
+                ).toLowerCase();
                 return combinedString.includes(searchVal);
             });
         }
@@ -2280,25 +2306,39 @@ document.addEventListener('DOMContentLoaded', () => {
         reportTableBody.innerHTML = '';
         
         if (records.length === 0) {
-            reportTableBody.innerHTML = '<tr><td colspan="11" style="text-align:center;">Henüz bir kayıt bulunmuyor.</td></tr>';
+            reportTableBody.innerHTML =
+                `<tr><td colspan="${REPORT_COLUMN_COUNT}" style="text-align:center;">Henüz bir kayıt bulunmuyor.</td></tr>`;
             return;
         }
         
         records.forEach(record => {
             const tr = document.createElement('tr');
-            tr.innerHTML = `
-                <td>${record.action_type || '-'}</td>
-                <td>${record.add_date || '-'}</td>
-                <td>${record.vehicle_name || '-'}</td>
-                <td><strong>${record.plate || '-'}</strong></td>
-                <td>${record.driver || '-'}</td>
-                <td>${record.start_mileage || '-'}</td>
-                <td>${record.end_mileage || '-'}</td>
-                <td>${record.start_date || '-'}</td>
-                <td><strong>${record.distance || '0'}</strong></td>
-                <td>${record.end_date || '-'}</td>
-                <td>${record.notes || ''}</td>
-            `;
+            const values = [
+                { value: record.action_type || '-' },
+                { value: record.add_date || '-' },
+                { value: record.vehicle_name || '-' },
+                { value: record.plate || '-', strong: true },
+                { value: record.driver || '-' },
+                { value: record.request_no || '-' },
+                { value: record.service_form_no || '-' },
+                { value: record.start_mileage || '-' },
+                { value: record.end_mileage || '-' },
+                { value: record.start_date || '-' },
+                { value: record.distance || '0', strong: true },
+                { value: record.end_date || '-' },
+                { value: record.notes || '' },
+            ];
+            values.forEach(({ value, strong = false }) => {
+                const td = document.createElement('td');
+                if (strong) {
+                    const strongElement = document.createElement('strong');
+                    strongElement.textContent = value;
+                    td.appendChild(strongElement);
+                } else {
+                    td.textContent = value;
+                }
+                tr.appendChild(td);
+            });
             reportTableBody.appendChild(tr);
         });
     }
@@ -2373,7 +2413,17 @@ document.addEventListener('DOMContentLoaded', () => {
     // Çıkış Yapma
     function logout() {
         hideAllSections();
-        state = { username: null, currentAction: null, currentStep: 1, plate: null, mileage: null };
+        state = {
+            username: null,
+            currentAction: null,
+            currentStep: 1,
+            plate: null,
+            actionType: null,
+            mileage: null,
+            requestNo: null,
+            serviceFormNo: null,
+            notes: null,
+        };
         document.getElementById('login-form').reset();
         
         loginSection.classList.remove('hidden');

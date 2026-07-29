@@ -161,15 +161,15 @@
                     <strong style="color: var(--text-secondary); font-size: 0.9rem;">Filtrele:</strong>
                     
                     <select id="filter-action-type" style="padding: 8px; font-size: 0.9rem; flex: 1;">
-                        <option value="all">Tüm Hareketler</option>
-                        <option value="Diğer">Diğer</option>
-                        <option value="Periyodik Bakım">Periyodik Bakım</option>
-                        <option value="Kurum İçi Operasyon...">Kurum İçi Operasyon</option>
+                        <option value="all">Tüm Kullanım Amaçları</option>
+                        {% for purpose in usage_purposes %}
+                        <option value="{{ purpose }}">{{ purpose }}</option>
+                        {% endfor %}
                     </select>
                     
                     <div style="position: relative; flex: 2; display: flex; align-items: center;">
                         <span style="position: absolute; left: 10px; font-size: 1rem; color: #94a3b8; pointer-events: none;">🔍</span>
-                        <input type="text" id="global-search" placeholder="Plaka, Araç İsmi, Sürücü Adı veya Not ara.." style="width: 100%; padding: 8px 8px 8px 35px; font-size: 0.9rem; background: rgba(15, 23, 42, 0.6); border: 1px solid var(--glass-border); border-radius: 8px; color: white;">
+                        <input type="text" id="global-search" placeholder="Plaka, araç, sürücü, talep, servis veya not ara..." style="width: 100%; padding: 8px 8px 8px 35px; font-size: 0.9rem; background: rgba(15, 23, 42, 0.6); border: 1px solid var(--glass-border); border-radius: 8px; color: white;">
                     </div>
                 </div>
 
@@ -193,11 +193,13 @@
                 <table class="modern-table">
                     <thead>
                         <tr>
-                            <th>Araç Hareket Tipi</th>
+                            <th>Kullanım Amacı</th>
                             <th>Ekleme Tarihi</th>
                             <th>Araç İsmi</th>
                             <th>Plaka</th>
                             <th>Sürücü Adı</th>
+                            <th>Talep No</th>
+                            <th>Servis Formu Numarası</th>
                             <th>İlk Sayaç</th>
                             <th>Son Sayaç</th>
                             <th>Başlangıç Tarihi</th>
@@ -208,7 +210,7 @@
                     </thead>
                     <tbody id="report-table-body">
                         <!-- Kayıtlar JS ile buraya yüklenecek -->
-                        <tr><td colspan="11" style="text-align:center;">Yükleniyor...</td></tr>
+                        <tr><td colspan="13" style="text-align:center;">Yükleniyor...</td></tr>
                     </tbody>
                 </table>
             </div>
@@ -292,12 +294,11 @@
                             <!-- Seçenekler JS ile dinamik olarak backend'den doldurulacak -->
                         </select>
 
-                        <label for="action-type-select" style="margin-top: 15px;">Araç Hareket Tipi</label>
+                        <label for="action-type-select" style="margin-top: 15px;">Kullanım Amacı</label>
                         <select id="action-type-select" name="action-type-select">
-                            <option value="Diğer" selected>Diğer</option>
-                            <option value="Periyodik Bakım">Periyodik Bakım</option>
-                            <option value="Kurum İçi Operasyon">Kurum İçi Operasyon</option>
-                            <option value="Müşteri Teslimatı">Müşteri Teslimatı</option>
+                            {% for purpose in usage_purposes %}
+                            <option value="{{ purpose }}" {% if purpose == "Diğer" %}selected{% endif %}>{{ purpose }}</option>
+                            {% endfor %}
                         </select>
                     </div>
 
@@ -305,6 +306,12 @@
                     <div id="step-mileage-container" class="input-group hidden">
                         <label for="mileage-input">Kilometre Değeri</label>
                         <input type="number" id="mileage-input" placeholder="Örn: 145000" min="0" step="1">
+
+                        <label for="request-no-input" style="margin-top: 15px;">Talep No (Opsiyonel)</label>
+                        <input type="text" id="request-no-input" placeholder="Talep numarasını giriniz..." maxlength="100" autocomplete="off">
+
+                        <label for="service-form-no-input" style="margin-top: 15px;">Servis Formu Numarası (Opsiyonel)</label>
+                        <input type="text" id="service-form-no-input" placeholder="Servis formu numarasını giriniz..." maxlength="100" autocomplete="off">
 
                         <label for="notes-input" style="margin-top: 15px;">Açıklama (Not)</label>
                         <input type="text" id="notes-input" placeholder="İsteğe bağlı not giriniz...">
@@ -369,8 +376,8 @@
     <script src="/static/js/camera.js"></script>
     <!-- Tesseract.js for OCR -->
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
-    <script src="/static/js/ocr-utils.js?v=15"></script>
-    <script src="/static/js/main.js?v=15"></script>
+    <script src="/static/js/ocr-utils.js?v=16"></script>
+    <script src="/static/js/main.js?v=16"></script>
 
     <script>
         // Sayfa değiştiğinde ana başlığı (Fatura İşleme Sistemi benzeri) gizle/göster

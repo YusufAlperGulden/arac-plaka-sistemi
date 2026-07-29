@@ -321,5 +321,147 @@ class OcrApiTests(unittest.TestCase):
             app_module.ACTIVE_TRIPS.pop(plate, None)
 
 
+class RecordApiTests(unittest.TestCase):
+    def setUp(self):
+        app_module.app.config.update(TESTING=True)
+        self.client = app_module.app.test_client()
+        self.active_trips_snapshot = {
+            plate: dict(trip)
+            for plate, trip in app_module.ACTIVE_TRIPS.items()
+        }
+        self.records_snapshot = [
+            dict(record)
+            for record in app_module.RECORDS_DB
+        ]
+
+    def tearDown(self):
+        app_module.ACTIVE_TRIPS.clear()
+        app_module.ACTIVE_TRIPS.update(self.active_trips_snapshot)
+        app_module.RECORDS_DB[:] = self.records_snapshot
+
+    def test_usage_purpose_catalog_is_rendered_in_form_and_filter(self):
+        expected_purposes = (
+            "Periyodik Bakım",
+            "Kurum İçi Operasyonlar",
+            "Diğer",
+            "Müşteri Ziyareti",
+            "Servis Amaçlı Kullanım",
+            "Şahsi Kullanım",
+            "Proje - Arıza - Bakım",
+        )
+        self.assertEqual(app_module.VEHICLE_USAGE_PURPOSES, expected_purposes)
+
+        html = self.client.get("/").get_data(as_text=True)
+        for purpose in expected_purposes:
+            with self.subTest(purpose=purpose):
+                self.assertEqual(html.count(f'value="{purpose}"'), 2)
+
+    def test_optional_company_fields_survive_pickup_and_dropoff(self):
+        plate = "34KM4969"
+        pickup_response = self.client.post(
+            "/api/record",
+            json={
+                "plate": plate,
+                "action": "pickup",
+                "action_type": "Servis Amaçlı Kullanım",
+                "mileage": "100",
+                "user": "admin",
+                "request_no": "  TAL-2026-15  ",
+                "service_form_no": "  SRV-88  ",
+                "notes": "Servise gidiş",
+            },
+        )
+
+        self.assertEqual(pickup_response.status_code, 201)
+        self.assertEqual(
+            app_module.ACTIVE_TRIPS[plate]["request_no"],
+            "TAL-2026-15",
+        )
+        self.assertEqual(
+            app_module.ACTIVE_TRIPS[plate]["service_form_no"],
+            "SRV-88",
+        )
+
+        dropoff_response = self.client.post(
+            "/api/record",
+            json={
+                "plate": plate,
+                "action": "dropoff",
+                "action_type": "Diğer",
+                "mileage": "125",
+                "user": "admin",
+                "request_no": "DEĞİŞTİRİLMEMELİ",
+                "service_form_no": "",
+                "notes": "Teslim edildi",
+            },
+        )
+
+        self.assertEqual(dropoff_response.status_code, 201)
+        record = app_module.RECORDS_DB[-1]
+        self.assertEqual(record["action_type"], "Servis Amaçlı Kullanım")
+        self.assertEqual(record["request_no"], "TAL-2026-15")
+        self.assertEqual(record["service_form_no"], "SRV-88")
+        self.assertEqual(record["distance"], "25.0")
+
+        recent_record = self.client.get(
+            "/api/reports/recent"
+        ).get_json()["records"][0]
+        plate_record = self.client.get(
+            f"/api/reports/plate/{plate}"
+        ).get_json()["records"][0]
+        self.assertEqual(recent_record["request_no"], "TAL-2026-15")
+        self.assertEqual(plate_record["service_form_no"], "SRV-88")
+
+    def test_company_fields_remain_optional_for_legacy_requests(self):
+        plate = "02ABG585"
+        response = self.client.post(
+            "/api/record",
+            json={
+                "plate": plate,
+                "action": "dropoff",
+                "action_type": "Müşteri Teslimatı",
+                "mileage": "240",
+                "user": "admin",
+                "notes": "",
+            },
+        )
+
+        self.assertEqual(response.status_code, 201)
+        record = app_module.RECORDS_DB[-1]
+        self.assertEqual(record["action_type"], "Müşteri Teslimatı")
+        self.assertEqual(record["request_no"], "")
+        self.assertEqual(record["service_form_no"], "")
+
+    def test_legacy_active_trip_can_receive_fields_at_dropoff(self):
+        plate = "34EZS794"
+        app_module.ACTIVE_TRIPS[plate] = {
+            "start_mileage": "300",
+            "start_date": "01.01.2026 08:00:00",
+            "driver": "admin",
+            "action_type": "Diğer",
+            "notes": "",
+        }
+
+        response = self.client.post(
+            "/api/record",
+            json={
+                "plate": plate,
+                "action": "dropoff",
+                "action_type": "Proje - Arıza - Bakım",
+                "mileage": "315",
+                "user": "admin",
+                "request_no": "TAL-LEGACY",
+                "service_form_no": None,
+                "notes": "",
+            },
+        )
+
+        self.assertEqual(response.status_code, 201)
+        record = app_module.RECORDS_DB[-1]
+        self.assertEqual(record["action_type"], "Proje - Arıza - Bakım")
+        self.assertEqual(record["request_no"], "TAL-LEGACY")
+        self.assertEqual(record["service_form_no"], "")
+
+
 if __name__ == "__main__":
     unittest.main()

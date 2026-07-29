@@ -77,6 +77,16 @@ USERS_DB = {
     "kullanici": "sifre123"
 }
 
+VEHICLE_USAGE_PURPOSES = (
+    "Periyodik Bakım",
+    "Kurum İçi Operasyonlar",
+    "Diğer",
+    "Müşteri Ziyareti",
+    "Servis Amaçlı Kullanım",
+    "Şahsi Kullanım",
+    "Proje - Arıza - Bakım",
+)
+
 # Dummy veri tabanı simülasyonu - Plakalar ve Araç İsimleri
 VEHICLES_DB = {
     "34KM4969": "2016 TRANSİT/TOUR...",
@@ -128,7 +138,7 @@ RECORDS_DB = [
         "notes": "muayene"
     },
     {
-        "action_type": "Kurum İçi Operasyon...",
+        "action_type": "Kurum İçi Operasyonlar",
         "add_date": "19.01.2026 15:06:38",
         "vehicle_name": "2016 TRANSİT/TOUR...",
         "plate": "34KM4969",
@@ -157,7 +167,10 @@ RECORDS_DB = [
 
 @app.route('/')
 def index():
-    return render_template('index.html')
+    return render_template(
+        'index.html',
+        usage_purposes=VEHICLE_USAGE_PURPOSES,
+    )
 
 @app.route('/api/login', methods=['POST'])
 def login():
@@ -189,10 +202,12 @@ def save_record():
     
     plate = data.get('plate')
     action = data.get('action') # 'pickup' veya 'dropoff'
-    action_type = data.get('action_type', 'Diğer') # Hareket tipi (Periyodik Bakım vb.)
+    action_type = str(data.get('action_type') or 'Diğer').strip()
     mileage = data.get('mileage', "0")
     user = data.get('user')
     notes = data.get('notes', '')
+    request_no = str(data.get('request_no') or '').strip()
+    service_form_no = str(data.get('service_form_no') or '').strip()
     
     if not plate or not action or not user:
         return jsonify({"success": False, "message": "Eksik veri gönderildi."}), 400
@@ -207,7 +222,9 @@ def save_record():
             "start_date": now_str,
             "driver": user,
             "action_type": action_type,
-            "notes": notes
+            "notes": notes,
+            "request_no": request_no,
+            "service_form_no": service_form_no,
         }
         return jsonify({"success": True, "message": f"{plate} için Araç Alma kaydedildi. (Başlangıç KM: {mileage})"}), 201
         
@@ -221,6 +238,8 @@ def save_record():
             driver = user
             act_type = action_type
             n = notes
+            resolved_request_no = request_no
+            resolved_service_form_no = service_form_no
         else:
             trip = ACTIVE_TRIPS.pop(plate)
             start_mileage = trip['start_mileage']
@@ -228,6 +247,10 @@ def save_record():
             driver = trip['driver'] # Aracı ilk alan kişiyi mi yoksa teslim edeni mi baz alalım? İlk alanı alalım.
             act_type = trip['action_type'] if trip['action_type'] != 'Diğer' else action_type
             n = trip['notes'] + (" | " + notes if notes else "")
+            resolved_request_no = trip.get('request_no', '') or request_no
+            resolved_service_form_no = (
+                trip.get('service_form_no', '') or service_form_no
+            )
         
         try:
             dist = float(mileage) - float(start_mileage)
@@ -246,7 +269,9 @@ def save_record():
             "start_date": start_date,
             "distance": str(dist),
             "end_date": now_str,
-            "notes": n.strip(" | ")
+            "notes": n.strip(" | "),
+            "request_no": resolved_request_no,
+            "service_form_no": resolved_service_form_no,
         }
         
         RECORDS_DB.append(record)
