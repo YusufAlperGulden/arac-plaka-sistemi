@@ -8,7 +8,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const {
         parseTurkishPlate,
         matchRegisteredPlate,
-        mapOverlayToVideoSource
+        mapOverlayToVideoSource,
+        buildVerticalScanCrops
     } = window.PlateOcrUtils;
 
     // ---- PWA Service Worker Registration ----
@@ -290,6 +291,37 @@ document.addEventListener('DOMContentLoaded', () => {
         };
     }
 
+    function captureVideoCrop(video, sourceCrop) {
+        const canvas = document.createElement('canvas');
+        const ocrSize = calculateOcrSize(sourceCrop.w, sourceCrop.h);
+        canvas.width = ocrSize.width;
+        canvas.height = ocrSize.height;
+
+        const ctx = canvas.getContext('2d', { willReadFrequently: true });
+        if (!ctx) {
+            throw new Error('Canvas 2D bağlamı oluşturulamadı.');
+        }
+
+        ctx.drawImage(
+            video,
+            sourceCrop.x,
+            sourceCrop.y,
+            sourceCrop.w,
+            sourceCrop.h,
+            0,
+            0,
+            canvas.width,
+            canvas.height
+        );
+
+        return {
+            canvas,
+            ctx,
+            originalImageData: ctx.getImageData(0, 0, canvas.width, canvas.height),
+            sourceCrop,
+        };
+    }
+
     // İşleme fonksiyonları
     function processGrayscale(ctx, width, height) {
         const imageData = ctx.getImageData(0, 0, width, height);
@@ -356,7 +388,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    async function requestLocalOcr(ctx, canvas, originalImageData, sessionId) {
+    async function requestLocalOcr(cropCaptures, sessionId) {
         triggerOcrBtn.textContent = '⏳ Yerel OCR hazırlanıyor...';
         const worker = await ensureOcrWorker();
         const registeredPlates = Array.from(plateSelect.options)
@@ -371,43 +403,52 @@ document.addEventListener('DOMContentLoaded', () => {
         ];
 
         for (const stage of stages) {
-            if (sessionId !== ocrSessionId) {
-                return null;
-            }
+            for (let cropIndex = 0; cropIndex < cropCaptures.length; cropIndex += 1) {
+                if (sessionId !== ocrSessionId) {
+                    return null;
+                }
 
-            triggerOcrBtn.textContent = `⏳ Yerel OCR: ${stage.name}`;
-            ctx.putImageData(originalImageData, 0, 0);
-            stage.apply(ctx, canvas.width, canvas.height);
+                const capture = cropCaptures[cropIndex];
+                const { ctx, canvas, originalImageData } = capture;
+                triggerOcrBtn.textContent =
+                    `⏳ Yerel OCR: ${stage.name} ${cropIndex + 1}/${cropCaptures.length}`;
+                ctx.putImageData(originalImageData, 0, 0);
+                stage.apply(ctx, canvas.width, canvas.height);
 
-            const result = await recognizeWithTimeout(worker, canvas, TESSERACT_STAGE_TIMEOUT_MS);
-            if (sessionId !== ocrSessionId) {
-                return null;
-            }
+                const result = await recognizeWithTimeout(worker, canvas, TESSERACT_STAGE_TIMEOUT_MS);
+                if (sessionId !== ocrSessionId) {
+                    return null;
+                }
 
-            const recognizedText = result.data.text || '';
-            const confidence = Number(result.data.confidence) || 0;
-            const registeredMatch = matchRegisteredPlate(recognizedText, registeredPlates);
-            const parsed = registeredMatch
-                ? parseTurkishPlate(registeredMatch.normalized)
-                : parseTurkishPlate(recognizedText);
+                const recognizedText = result.data.text || '';
+                const confidence = Number(result.data.confidence) || 0;
+                const registeredMatch = matchRegisteredPlate(recognizedText, registeredPlates);
+                const parsed = registeredMatch
+                    ? parseTurkishPlate(registeredMatch.normalized)
+                    : parseTurkishPlate(recognizedText);
 
-            if (parsed && (confidence >= OCR_MIN_CONFIDENCE || registeredMatch)) {
-                candidates.push({
-                    text: parsed.normalized,
-                    confidence,
-                    corrected: Boolean(registeredMatch?.corrected),
-                    parts: [
-                        parsed.provinceCode.toString().padStart(2, '0'),
-                        parsed.letters,
-                        parsed.digits
-                    ],
-                    canvasContext: ctx.getImageData(0, 0, canvas.width, canvas.height),
-                    canvasW: canvas.width,
-                    canvasH: canvas.height
-                });
+                if (parsed && (confidence >= OCR_MIN_CONFIDENCE || registeredMatch)) {
+                    const candidate = {
+                        text: parsed.normalized,
+                        confidence,
+                        corrected: Boolean(registeredMatch?.corrected),
+                        parts: [
+                            parsed.provinceCode.toString().padStart(2, '0'),
+                            parsed.letters,
+                            parsed.digits
+                        ],
+                        canvasContext: ctx.getImageData(0, 0, canvas.width, canvas.height),
+                        originalCanvasContext: originalImageData,
+                        canvasW: canvas.width,
+                        canvasH: canvas.height
+                    };
+                    candidates.push(candidate);
 
-                if (confidence >= 85 && !registeredMatch?.corrected) {
-                    break;
+                    // Geçerli bir tam plaka minimum güven eşiğini geçtiğinde diğer
+                    // filtreleri bekletmeden sonucu göster; mobilde gecikmeyi azaltır.
+                    if (confidence >= OCR_MIN_CONFIDENCE && !registeredMatch?.corrected) {
+                        return candidate;
+                    }
                 }
             }
         }
@@ -429,6 +470,11 @@ document.addEventListener('DOMContentLoaded', () => {
             ocrDebugCanvas.height = bestMatch.canvasH;
             ocrDebugCanvas.getContext('2d').putImageData(bestMatch.canvasContext, 0, 0);
         }
+        if (ocrOriginalCanvas && bestMatch.originalCanvasContext) {
+            ocrOriginalCanvas.width = bestMatch.canvasW;
+            ocrOriginalCanvas.height = bestMatch.canvasH;
+            ocrOriginalCanvas.getContext('2d').putImageData(bestMatch.originalCanvasContext, 0, 0);
+        }
 
         ocrResultText.textContent = bestMatch.parts.join(' ');
 
@@ -449,8 +495,8 @@ document.addEventListener('DOMContentLoaded', () => {
             ocrConfirmBtn.disabled = false;
             ocrConfirmBtn.style.opacity = '1';
         } else {
-            ocrDbStatus.textContent = '❌ Kayıtlı Değil';
-            ocrDbStatus.style.color = '#ef4444';
+            ocrDbStatus.textContent = '⚠️ Okundu • Araç Kayıtlı Değil';
+            ocrDbStatus.style.color = '#facc15';
             ocrConfirmBtn.disabled = true;
             ocrConfirmBtn.style.opacity = '0.5';
         }
@@ -496,33 +542,19 @@ document.addEventListener('DOMContentLoaded', () => {
                     objectPosition: computedStyle.objectPosition
                 });
 
-                const canvas = document.createElement('canvas');
-                const ocrSize = calculateOcrSize(sourceCrop.w, sourceCrop.h);
-                canvas.width = ocrSize.width;
-                canvas.height = ocrSize.height;
-                const ctx = canvas.getContext('2d', { willReadFrequently: true });
-                if (!ctx) throw new Error('Canvas 2D bağlamı oluşturulamadı.');
-
-                ctx.drawImage(
-                    video,
-                    sourceCrop.x,
-                    sourceCrop.y,
-                    sourceCrop.w,
-                    sourceCrop.h,
-                    0,
-                    0,
-                    canvas.width,
-                    canvas.height
-                );
-                const originalImageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                const sourceCrops = buildVerticalScanCrops(sourceCrop, video.videoHeight);
+                const cropCaptures = sourceCrops.map(crop => captureVideoCrop(video, crop));
+                const primaryCapture = cropCaptures[0];
 
                 if (ocrOriginalCanvas) {
-                    ocrOriginalCanvas.width = canvas.width;
-                    ocrOriginalCanvas.height = canvas.height;
-                    ocrOriginalCanvas.getContext('2d').putImageData(originalImageData, 0, 0);
+                    ocrOriginalCanvas.width = primaryCapture.canvas.width;
+                    ocrOriginalCanvas.height = primaryCapture.canvas.height;
+                    ocrOriginalCanvas
+                        .getContext('2d')
+                        .putImageData(primaryCapture.originalImageData, 0, 0);
                 }
 
-                const serverResult = await requestServerOcr(canvas);
+                const serverResult = await requestServerOcr(primaryCapture.canvas);
                 if (sessionId !== ocrSessionId) return;
 
                 let bestMatch = null;
@@ -537,18 +569,14 @@ document.addEventListener('DOMContentLoaded', () => {
                             serverResult.letters,
                             serverResult.digits
                         ],
-                        canvasContext: originalImageData,
-                        canvasW: canvas.width,
-                        canvasH: canvas.height
+                        canvasContext: primaryCapture.originalImageData,
+                        originalCanvasContext: primaryCapture.originalImageData,
+                        canvasW: primaryCapture.canvas.width,
+                        canvasH: primaryCapture.canvas.height
                     };
                     source = 'gemini';
                 } else {
-                    bestMatch = await requestLocalOcr(
-                        ctx,
-                        canvas,
-                        originalImageData,
-                        sessionId
-                    );
+                    bestMatch = await requestLocalOcr(cropCaptures, sessionId);
                     source = bestMatch ? 'tesseract' : null;
                 }
 
@@ -557,7 +585,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     showOcrResult(bestMatch, source);
                 } else {
                     window.showToast(
-                        'Plaka net okunamadı. Plakayı çerçeveye yaklaştırıp tekrar deneyin.',
+                        'Plaka net okunamadı. Tek plakayı çerçeveye ortalayıp tekrar deneyin.',
                         'error'
                     );
                 }

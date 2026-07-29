@@ -67,9 +67,27 @@
 
         const compact = source.replace(/[^A-Z0-9]/g, '');
         const compactMatch = /^(\d{2})([A-Z]{1,3})(\d{2,5})$/.exec(compact);
-        return compactMatch
-            ? buildPlate(compactMatch[1], compactMatch[2], compactMatch[3])
-            : null;
+        if (compactMatch) {
+            return buildPlate(compactMatch[1], compactMatch[2], compactMatch[3]);
+        }
+
+        // Plakanın sol kenarı veya mavi TR bandı bazen tek bir harf/rakam
+        // olarak okunur (örn. H02ABG585 veya 102ABG585). Sadece en fazla iki
+        // karakterlik bir ön eki atarak geçerli bir plaka son eki arıyoruz;
+        // böylece 34ABC1234 gibi gerçekten geçersiz uzun plakaları kabul etmeyiz.
+        for (let prefixLength = 1; prefixLength <= Math.min(2, compact.length - 1); prefixLength += 1) {
+            const suffixMatch = /^(\d{2})([A-Z]{1,3})(\d{2,5})$/.exec(compact.slice(prefixLength));
+            if (!suffixMatch) {
+                continue;
+            }
+
+            const parsed = buildPlate(suffixMatch[1], suffixMatch[2], suffixMatch[3]);
+            if (parsed) {
+                return parsed;
+            }
+        }
+
+        return null;
     }
 
     function charactersAreOcrEquivalent(left, right) {
@@ -219,9 +237,54 @@
         return { x, y, w, h };
     }
 
+    function buildVerticalScanCrops(sourceCrop, frameHeight, offsets = [0, -0.5, 0.5]) {
+        if (
+            !sourceCrop
+            || !Number.isFinite(sourceCrop.x)
+            || !Number.isFinite(sourceCrop.y)
+            || !Number.isFinite(sourceCrop.w)
+            || !Number.isFinite(sourceCrop.h)
+            || sourceCrop.w <= 0
+            || sourceCrop.h <= 0
+            || !Number.isFinite(frameHeight)
+            || frameHeight <= 0
+            || sourceCrop.h > frameHeight
+        ) {
+            throw new Error('Dikey OCR taraması için geçerli bir görüntü alanı gerekli.');
+        }
+
+        const maximumY = frameHeight - sourceCrop.h;
+        const seenY = new Set();
+        const crops = [];
+
+        for (const offset of offsets) {
+            if (!Number.isFinite(offset)) {
+                continue;
+            }
+
+            const y = Math.max(0, Math.min(maximumY, sourceCrop.y + sourceCrop.h * offset));
+            const roundedY = Math.round(y * 1000) / 1000;
+            if (seenY.has(roundedY)) {
+                continue;
+            }
+
+            seenY.add(roundedY);
+            crops.push({
+                x: sourceCrop.x,
+                y,
+                w: sourceCrop.w,
+                h: sourceCrop.h,
+                offset,
+            });
+        }
+
+        return crops;
+    }
+
     return {
         parseTurkishPlate,
         matchRegisteredPlate,
         mapOverlayToVideoSource,
+        buildVerticalScanCrops,
     };
 }));

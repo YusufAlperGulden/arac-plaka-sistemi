@@ -3,6 +3,7 @@ const {
     parseTurkishPlate,
     matchRegisteredPlate,
     mapOverlayToVideoSource,
+    buildVerticalScanCrops,
 } = require('../static/js/ocr-utils.js');
 
 function assertRect(actual, expected, tolerance = 1) {
@@ -99,6 +100,8 @@ const validPlates = new Map([
     ['06-A-12345', '06A12345'],
     ['34 ABC 12', '34ABC12'],
     ['Plaka: 34 EZS 794', '34EZS794'],
+    ['H02ABG585', '02ABG585'],
+    ['102 ABG585', '02ABG585'],
 ]);
 
 for (const [input, expected] of validPlates) {
@@ -118,5 +121,29 @@ assert.deepEqual(
     { normalized: '34KM4969', corrected: true }
 );
 assert.equal(matchRegisteredPlate('34ABC123', ['34EZS794', '34KM4969']), null);
+
+assert.deepEqual(
+    buildVerticalScanCrops(
+        { x: 203, y: 817, w: 538, h: 134 },
+        1159,
+    ),
+    [
+        { x: 203, y: 817, w: 538, h: 134, offset: 0 },
+        { x: 203, y: 750, w: 538, h: 134, offset: -0.5 },
+        { x: 203, y: 884, w: 538, h: 134, offset: 0.5 },
+    ]
+);
+
+assert.deepEqual(
+    buildVerticalScanCrops(
+        { x: 10, y: 0, w: 100, h: 80 },
+        100,
+        [0, -0.5, 0.5, 2],
+    ),
+    [
+        { x: 10, y: 0, w: 100, h: 80, offset: 0 },
+        { x: 10, y: 20, w: 100, h: 80, offset: 0.5 },
+    ]
+);
 
 console.log('All OCR utility tests passed.');
