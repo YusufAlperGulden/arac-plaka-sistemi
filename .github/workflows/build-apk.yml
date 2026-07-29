@@ -1,9 +1,9 @@
 name: Build Android APK (Capacitor)
 
 on:
-  workflow_dispatch:  # İstenildiği zaman manuel olarak tetiklenebilir
+  workflow_dispatch:
   push:
-    branches: [ "main" ] # Her main commitinde otomatik oluştur
+    branches: [ "main" ]
 
 jobs:
   build-android:
@@ -29,12 +29,16 @@ jobs:
           npm init -y
           npm install @capacitor/core @capacitor/cli @capacitor/android
           
+          # Create a dummy www folder to satisfy Capacitor
+          mkdir -p www
+          echo "<html><body>Redirecting...</body></html>" > www/index.html
+          
           # Capacitor yapılandırma dosyası oluşturuluyor
           cat << 'EOF' > capacitor.config.json
           {
             "appId": "com.teknopalas.aracplaka",
             "appName": "Plaka Sistemi",
-            "webDir": "templates",
+            "webDir": "www",
             "server": {
               "url": "https://arac-plaka-sistemi.onrender.com",
               "cleartext": true
@@ -48,9 +52,25 @@ jobs:
 
       - name: 📷 Android İzinlerini (Kamera/İnternet) Ekle
         run: |
-          MANIFEST="android/app/src/main/AndroidManifest.xml"
-          # AndroidManifest içine gerekli izinleri enjekte et
-          sed -i '/<application/i \    <uses-permission android:name="android.permission.INTERNET" />\n    <uses-permission android:name="android.permission.CAMERA" />\n    <uses-feature android:name="android.hardware.camera" android:required="true" />' $MANIFEST
+          python -c "
+          import os
+          manifest_path = 'android/app/src/main/AndroidManifest.xml'
+          if not os.path.exists(manifest_path):
+              print('Manifest not found!')
+              exit(1)
+          with open(manifest_path, 'r') as f:
+              content = f.read()
+          
+          permissions = '''    <uses-permission android:name=\"android.permission.INTERNET\" />
+              <uses-permission android:name=\"android.permission.CAMERA\" />
+              <uses-feature android:name=\"android.hardware.camera\" android:required=\"true\" />
+          '''
+          
+          content = content.replace('<application', permissions + '\n    <application')
+          with open(manifest_path, 'w') as f:
+              f.write(content)
+          print('Permissions injected.')
+          "
 
       - name: 📦 Gradle ile APK Derle
         working-directory: ./android
