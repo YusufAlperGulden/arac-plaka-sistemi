@@ -31,7 +31,7 @@ jobs:
 
       - name: Build APK
         working-directory: android-native
-        run: gradle assembleDebug --stacktrace > build_log.txt 2>&1 || true
+        run: gradle assembleDebug -Pandroid.useAndroidX=true -Pandroid.enableJetifier=true --stacktrace > build_log.txt 2>&1 || true
 
       - name: Push Logs
         if: always()
