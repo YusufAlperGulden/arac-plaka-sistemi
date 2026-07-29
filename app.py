@@ -1,4 +1,5 @@
-from flask import Flask, render_template, request, jsonify
+from flask import Flask, render_template, request, jsonify, session
+import time
 from datetime import datetime
 import os
 import base64
@@ -14,6 +15,11 @@ except ImportError:
     print("WARNING: google.generativeai not installed.")
 
 app = Flask(__name__)
+app.secret_key = os.environ.get('SECRET_KEY', 'super-secret-key-123')
+
+RATE_LIMITS = {}
+RATE_LIMIT_WINDOW = 60 # 60 seconds
+MAX_REQUESTS_PER_WINDOW = 5
 
 USERS_DB = {
     "Teknopalas": "123456",
@@ -113,6 +119,7 @@ def login():
     password = data.get('password')
     
     if username in USERS_DB and USERS_DB[username] == password:
+        session['user'] = username
         return jsonify({"success": True, "message": "Giriş başarılı."}), 200
     else:
         return jsonify({"success": False, "message": "Hatalı Kullanıcı Adı veya Şifre!"}), 401
@@ -200,6 +207,25 @@ import re
 
 @app.route('/api/gemini-ocr', methods=['POST'])
 def gemini_ocr():
+    # Authentication check
+    if 'user' not in session:
+        return jsonify({"success": False, "message": "Oturum süresi doldu veya yetkisiz erişim."}), 401
+
+    # Basic in-memory rate limiting by IP
+    client_ip = request.remote_addr
+    current_time = time.time()
+    
+    if client_ip not in RATE_LIMITS:
+        RATE_LIMITS[client_ip] = []
+    
+    # Remove timestamps older than window
+    RATE_LIMITS[client_ip] = [t for t in RATE_LIMITS[client_ip] if current_time - t < RATE_LIMIT_WINDOW]
+    
+    if len(RATE_LIMITS[client_ip]) >= MAX_REQUESTS_PER_WINDOW:
+        return jsonify({"success": False, "message": "Çok fazla istek gönderildi. Lütfen 1 dakika bekleyin."}), 429
+        
+    RATE_LIMITS[client_ip].append(current_time)
+
     if not genai or not os.environ.get("GEMINI_API_KEY"):
         return jsonify({"success": False, "message": "Gemini API anahtarı ayarlanmamış veya kütüphane eksik."}), 503
         
@@ -240,7 +266,7 @@ def gemini_ocr():
         response = model.generate_content([
             {'mime_type': mime_type, 'data': base64_data},
             prompt
-        ])
+        ], request_options={"timeout": 10.0})
         
         # Parse output safely
         text = response.text.strip()

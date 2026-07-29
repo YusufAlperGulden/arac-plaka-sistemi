@@ -521,6 +521,13 @@ document.addEventListener('DOMContentLoaded', () => {
                             }
                         } else {
                             console.warn("Gemini API HTTP Hata:", response.status);
+                            if (response.status === 401) {
+                                window.showToast('Oturum süresi doldu. Lütfen tekrar giriş yapın.', 'error');
+                                setTimeout(() => window.location.reload(), 2000);
+                                throw new Error("Unauthorized"); // Skip to fallback or abort
+                            } else if (response.status === 429) {
+                                window.showToast('Çok fazla istek yapıldı. Yerel OCR devreye giriyor.', 'error');
+                            }
                         }
                     } catch (err) {
                         if (err.name === 'AbortError') throw new OcrTimeoutError();
