@@ -5,6 +5,13 @@
  */
 
 document.addEventListener('DOMContentLoaded', () => {
+    // ---- PWA Service Worker Registration ----
+    if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('/static/service-worker.js')
+            .then(reg => console.log('Service Worker registered', reg))
+            .catch(err => console.error('Service Worker registration failed', err));
+    }
+
     // ---- EKRAN BÖLÜMLERİ (SECTIONS) ----
     const loginSection = document.getElementById('login-section');
     const actionSection = document.getElementById('action-selection-section');
