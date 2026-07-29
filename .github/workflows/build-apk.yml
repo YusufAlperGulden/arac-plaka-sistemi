@@ -1,62 +1,45 @@
-name: Build Android APK (Capacitor)
+name: Build Android APK
 
 on:
   workflow_dispatch:
   push:
-    branches: [ "main" ]
+    branches: ["main"]
+    paths:
+      - "android-app/**"
+      - ".github/workflows/build-apk.yml"
+
+permissions:
+  contents: read
 
 jobs:
   build-android:
     runs-on: ubuntu-latest
-    
+
     steps:
-      - name: 📥 Kodu İndir
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: ⚙️ Node.js Kurulumu
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
-      - name: ☕ Java Kurulumu
+      - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
-          distribution: 'temurin'
-          java-version: '17'
+          distribution: temurin
+          java-version: "17"
 
-      - name: 🛠️ Capacitor Kurulumu
+      - name: Install Android SDK packages
         run: |
-          npm init -y
-          # Install core, android, and camera plugin to automatically inject camera permissions
-          npm install @capacitor/core @capacitor/cli @capacitor/android @capacitor/camera
-          
-          mkdir -p www
-          echo "<html><head><meta http-equiv='refresh' content='0; url=https://arac-plaka-sistemi.onrender.com' /></head><body>Yönlendiriliyor...</body></html>" > www/index.html
-          
-          cat << 'EOF' > capacitor.config.json
-          {
-            "appId": "com.teknopalas.aracplaka",
-            "appName": "Plaka Sistemi",
-            "webDir": "www",
-            "server": {
-              "url": "https://arac-plaka-sistemi.onrender.com",
-              "cleartext": true
-            }
-          }
-          EOF
-          
-          npx cap add android
-          npx cap sync android
+          yes | sdkmanager --licenses >/dev/null
+          sdkmanager "platforms;android-35" "build-tools;35.0.0"
 
-      - name: 📦 Gradle ile APK Derle
-        working-directory: ./android
+      - name: Build signed internal-distribution APK
+        working-directory: android-app
         run: |
           chmod +x gradlew
-          ./gradlew assembleDebug --stacktrace
+          ./gradlew assembleDebug --stacktrace > build_log.txt 2>&1 || { cat build_log.txt; exit 1; }
 
-      - name: 🚀 APK'yı Yükle
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: Plaka-Sistemi-APK
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+          name: Arac-Plaka-APK
+          path: android-app/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
           retention-days: 30
