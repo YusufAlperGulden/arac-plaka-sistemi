@@ -33,7 +33,7 @@ jobs:
       - name: Build signed internal-distribution APK
         working-directory: android-app
         run: |
-          chmod +x gradlew
+          gradle wrapper --gradle-version 8.4
           ./gradlew assembleDebug --stacktrace > build_log.txt 2>&1 || { cat build_log.txt; exit 1; }
 
       - name: Upload APK

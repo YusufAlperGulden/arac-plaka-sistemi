@@ -23,7 +23,8 @@ jobs:
       - name: 📦 Gradle ile APK Derle
         working-directory: ./android-native
         run: |
-          gradle assembleDebug --stacktrace > build_log.txt 2>&1 || { cat build_log.txt; exit 1; }
+          gradle wrapper --gradle-version 8.4
+          ./gradlew assembleDebug --stacktrace > build_log.txt 2>&1 || { cat build_log.txt; exit 1; }
 
       - name: 🚀 APK'yı Yükle
         uses: actions/upload-artifact@v4
