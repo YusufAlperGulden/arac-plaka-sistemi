@@ -2,80 +2,105 @@
 <html lang="tr">
 <head>
     <meta charset="UTF-8">
-    <title>OCR Real Test Fixtures (Browser Runtime)</title>
+    <title>OCR Tarayıcı Testleri</title>
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+    <script src="../static/js/ocr-utils.js"></script>
     <style>
         body { font-family: sans-serif; padding: 20px; background: #0f172a; color: white; }
-        .test-case { background: #1e293b; padding: 15px; margin-bottom: 20px; border-radius: 8px; border: 1px solid #334155; }
+        button { padding: 10px 20px; background: #3b82f6; border: 0; border-radius: 6px; color: white; }
+        .test-case { background: #1e293b; padding: 15px; margin-top: 15px; border-radius: 8px; }
         .success { color: #4ade80; }
         .fail { color: #f87171; }
         .running { color: #fbbf24; }
-        img { border: 1px dashed #64748b; max-height: 100px; margin-right: 15px; }
-        .flex { display: flex; align-items: center; }
+        canvas { width: min(100%, 720px); height: auto; border-radius: 5px; }
     </style>
 </head>
 <body>
-    <h1>OCR Gerçek Test Aracı</h1>
-    <p>Node.js ortamı olmadığı için Tesseract doğrudan tarayıcı belleğinde gerçek görüntülerle test edilmektedir.</p>
-    <button id="start-tests" style="padding: 10px 20px; background: #3b82f6; border: none; border-radius: 4px; color: white; cursor: pointer;">Testleri Başlat</button>
-    
-    <div id="results" style="margin-top: 20px;"></div>
+    <h1>OCR Tarayıcı Testleri</h1>
+    <p>Gerçek Tesseract worker’ını sentetik Türk plakalarıyla sınar.</p>
+    <button id="start-tests">Testleri Başlat</button>
+    <div id="summary"></div>
+    <div id="results"></div>
 
     <script>
-        // Note: Normalde bu base64 string'ler gerçek resim verisi olmalıdır.
-        // Testleri kolaylaştırmak için temsili boş veri konulmuştur, siz img.src'yi kendi plaka resimlerinizle değiştirebilirsiniz.
         const fixtures = [
-            { id: 1, name: "Net Plaka (34ABC123)", src: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=", expect: "34ABC123" },
-            { id: 2, name: "Bulanık Plaka", src: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=", expect: "fail" },
-            { id: 3, name: "Plaka Yok (Boş duvar)", src: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=", expect: "fail" }
+            { label: '34 KM 4969', expected: '34KM4969' },
+            { label: '34 EZS 794', expected: '34EZS794' },
+            { label: '', expected: null }
         ];
 
+        function createPlateCanvas(label) {
+            const canvas = document.createElement('canvas');
+            canvas.width = 720;
+            canvas.height = 180;
+            const context = canvas.getContext('2d');
+            context.fillStyle = '#ffffff';
+            context.fillRect(0, 0, canvas.width, canvas.height);
+            context.strokeStyle = '#111827';
+            context.lineWidth = 8;
+            context.strokeRect(6, 6, canvas.width - 12, canvas.height - 12);
+            context.fillStyle = '#0b3d91';
+            context.fillRect(10, 10, 58, canvas.height - 20);
+            context.fillStyle = '#ffffff';
+            context.font = 'bold 24px Arial';
+            context.fillText('TR', 22, 145);
+            if (label) {
+                context.fillStyle = '#111111';
+                context.font = 'bold 86px Arial';
+                context.textAlign = 'center';
+                context.textBaseline = 'middle';
+                context.fillText(label, 392, 91);
+            }
+            return canvas;
+        }
+
         document.getElementById('start-tests').addEventListener('click', async () => {
-            const resultsDiv = document.getElementById('results');
-            resultsDiv.innerHTML = '<h3 class="running">⏳ Tesseract Worker Yükleniyor...</h3>';
-            
-            const startInit = performance.now();
+            const button = document.getElementById('start-tests');
+            const results = document.getElementById('results');
+            const summary = document.getElementById('summary');
+            button.disabled = true;
+            summary.className = 'running';
+            summary.textContent = 'OCR motoru yükleniyor...';
+            results.replaceChildren();
+
             let worker;
             try {
                 worker = await Tesseract.createWorker('eng', 1);
                 await worker.setParameters({
                     tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 ',
                     tessedit_pageseg_mode: Tesseract.PSM.SINGLE_LINE,
+                    preserve_interword_spaces: '1'
                 });
-            } catch (err) {
-                resultsDiv.innerHTML = `<h3 class="fail">❌ Yükleme Hatası: ${err.message}</h3>`;
-                return;
-            }
-            const initTime = performance.now() - startInit;
-            resultsDiv.innerHTML = `<h3>✅ Motor Hazır (${initTime.toFixed(0)} ms)</h3>`;
 
-            for (const fixture of fixtures) {
-                const caseDiv = document.createElement('div');
-                caseDiv.className = 'test-case flex';
-                
-                const img = new Image();
-                img.src = fixture.src;
-                
-                const info = document.createElement('div');
-                info.innerHTML = `<strong>${fixture.name}</strong><br><span class="running" id="status-${fixture.id}">⏳ İşleniyor...</span>`;
-                
-                caseDiv.appendChild(img);
-                caseDiv.appendChild(info);
-                resultsDiv.appendChild(caseDiv);
-                
-                const startOcr = performance.now();
-                const result = await worker.recognize(img);
-                const time = performance.now() - startOcr;
-                
-                const text = result.data.text.replace(/[^A-Z0-9]/gi, '').toUpperCase();
-                const statusSpan = document.getElementById(`status-${fixture.id}`);
-                
-                statusSpan.innerHTML = `Bulunan: [${text}] - Süre: ${time.toFixed(0)}ms<br>`;
-                if (text === fixture.expect || (fixture.expect === 'fail' && text.length < 5)) {
-                    statusSpan.innerHTML += `<span class="success">✅ PASS</span>`;
-                } else {
-                    statusSpan.innerHTML += `<span class="fail">❌ FAIL (Beklenen: ${fixture.expect})</span>`;
+                let passed = 0;
+                for (const fixture of fixtures) {
+                    const canvas = createPlateCanvas(fixture.label);
+                    const result = await worker.recognize(canvas);
+                    const parsed = PlateOcrUtils.parseTurkishPlate(result.data.text);
+                    const actual = parsed?.normalized || null;
+                    const success = actual === fixture.expected;
+                    if (success) passed += 1;
+
+                    const row = document.createElement('div');
+                    row.className = 'test-case';
+                    row.appendChild(canvas);
+                    const status = document.createElement('p');
+                    status.className = success ? 'success' : 'fail';
+                    status.textContent = `${success ? 'PASS' : 'FAIL'}: `
+                        + `${fixture.label || 'boş görüntü'} → ${actual || 'plaka yok'} `
+                        + `(güven: %${Math.round(result.data.confidence)})`;
+                    row.appendChild(status);
+                    results.appendChild(row);
                 }
+
+                summary.className = passed === fixtures.length ? 'success' : 'fail';
+                summary.textContent = `${passed}/${fixtures.length} test geçti.`;
+            } catch (error) {
+                summary.className = 'fail';
+                summary.textContent = `OCR yükleme hatası: ${error.message}`;
+            } finally {
+                await worker?.terminate();
+                button.disabled = false;
             }
         });
     </script>

@@ -8,6 +8,7 @@ window.cameraController = {
     videoElement: null,
     errorElement: null,
     errorMsgElement: null,
+    requestId: 0,
 
     init: function() {
         this.videoElement = document.getElementById('camera-stream');
@@ -21,61 +22,113 @@ window.cameraController = {
     },
 
     startCamera: async function() {
-        // Hata mesajını gizle
-        this.errorElement.classList.add('hidden');
-        
-        // Eğer zaten açık bir kamera varsa kapat (yeniden başlatma durumları için)
         this.stopCamera();
+        const requestId = ++this.requestId;
+        this.errorElement?.classList.add('hidden');
 
         try {
-            // Kamera izni iste ve akışı al
-            // video: { facingMode: 'environment' } -> mobil cihazlarda arka kamerayı öncelikli açar
+            if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
+                const error = new Error('Kamera erişimi için güvenli bağlantı gerekiyor.');
+                error.name = 'InsecureContextError';
+                throw error;
+            }
+
             const constraints = {
                 video: {
-                    facingMode: 'environment', 
+                    facingMode: { ideal: 'environment' },
                     width: { ideal: 1280 },
                     height: { ideal: 720 }
                 },
                 audio: false
             };
 
-            this.stream = await navigator.mediaDevices.getUserMedia(constraints);
-            
-            // Akışı video elementine bağla
+            const stream = await navigator.mediaDevices.getUserMedia(constraints);
+            if (requestId !== this.requestId) {
+                stream.getTracks().forEach(track => track.stop());
+                return false;
+            }
+
+            this.stream = stream;
             this.videoElement.srcObject = this.stream;
-            
+            await this.waitUntilReady(this.videoElement, 8000);
+            await this.videoElement.play();
+            return true;
         } catch (error) {
+            if (requestId !== this.requestId) {
+                return false;
+            }
             console.error("Kamera erişim hatası:", error);
+            this.stopCamera();
             this.handleCameraError(error);
+            return false;
         }
     },
 
     stopCamera: function() {
+        this.requestId += 1;
         if (this.stream) {
             this.stream.getTracks().forEach(track => track.stop());
             this.stream = null;
         }
         if (this.videoElement) {
+            this.videoElement.pause();
             this.videoElement.srcObject = null;
         }
     },
 
+    waitUntilReady: function(video, timeoutMs) {
+        if (video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA && video.videoWidth > 0) {
+            return Promise.resolve();
+        }
+
+        return new Promise((resolve, reject) => {
+            const timeoutId = setTimeout(() => {
+                cleanup();
+                const error = new Error('Kamera görüntüsü zamanında hazırlanamadı.');
+                error.name = 'CameraTimeoutError';
+                reject(error);
+            }, timeoutMs);
+
+            const onReady = () => {
+                if (video.videoWidth > 0 && video.videoHeight > 0) {
+                    cleanup();
+                    resolve();
+                }
+            };
+
+            const cleanup = () => {
+                clearTimeout(timeoutId);
+                video.removeEventListener('loadedmetadata', onReady);
+                video.removeEventListener('canplay', onReady);
+            };
+
+            video.addEventListener('loadedmetadata', onReady);
+            video.addEventListener('canplay', onReady);
+        });
+    },
+
     handleCameraError: function(error) {
         // Edge Cases (Hata Senaryoları) yönetimi
-        this.errorElement.classList.remove('hidden');
+        this.errorElement?.classList.remove('hidden');
         
         let errorMsg = "Kameraya erişilemedi.";
         
-        if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
+        if (error.name === 'InsecureContextError') {
+            errorMsg = "Kamera için uygulamayı HTTPS üzerinden veya localhost adresinde açın.";
+        } else if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
             errorMsg = "Kamera erişim izni reddedildi. Lütfen tarayıcı ayarlarından izin verin.";
             window.showToast("Kamera izni verilmedi!", "error");
         } else if (error.name === 'NotFoundError' || error.name === 'DevicesNotFoundError') {
             errorMsg = "Cihazınızda bir kamera bulunamadı.";
         } else if (error.name === 'NotReadableError' || error.name === 'TrackStartError') {
             errorMsg = "Kamera başka bir uygulama tarafından kullanılıyor olabilir.";
+        } else if (error.name === 'CameraTimeoutError') {
+            errorMsg = "Kamera görüntüsü hazırlanamadı. Tekrar deneyin.";
         }
         
-        this.errorMsgElement.textContent = errorMsg;
+        if (this.errorMsgElement) {
+            this.errorMsgElement.textContent = errorMsg;
+        }
     }
 };
 

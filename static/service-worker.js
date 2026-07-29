@@ -1,57 +1,70 @@
-const CACHE_NAME = 'plaka-sistemi-v1';
-const ASSETS_TO_CACHE = [
+const CACHE_NAME = 'plaka-sistemi-v7-ocr';
+const CORE_ASSETS = [
   '/',
   '/static/css/style.css',
+  '/static/js/auth.js',
+  '/static/js/camera.js',
+  '/static/js/ocr-utils.js',
   '/static/js/main.js',
   '/static/manifest.json',
   '/static/icon-192x192.png',
-  '/static/icon-512x512.png',
-  'https://cdn.tailwindcss.com',
-  'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css',
-  'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js'
+  '/static/icon-512x512.png'
 ];
 
-// Install Event
-self.addEventListener('install', (event) => {
+self.addEventListener('install', event => {
   event.waitUntil(
     caches.open(CACHE_NAME)
-      .then((cache) => {
-        return cache.addAll(ASSETS_TO_CACHE);
-      })
+      .then(cache => cache.addAll(CORE_ASSETS))
+      .then(() => self.skipWaiting())
   );
 });
 
-// Activate Event
-self.addEventListener('activate', (event) => {
+self.addEventListener('activate', event => {
   event.waitUntil(
-    caches.keys().then((cacheNames) => {
-      return Promise.all(
-        cacheNames.map((cache) => {
-          if (cache !== CACHE_NAME) {
-            return caches.delete(cache);
-          }
-        })
-      );
-    })
+    caches.keys()
+      .then(cacheNames => Promise.all(
+        cacheNames
+          .filter(cacheName => cacheName !== CACHE_NAME)
+          .map(cacheName => caches.delete(cacheName))
+      ))
+      .then(() => self.clients.claim())
   );
 });
 
-// Fetch Event
-self.addEventListener('fetch', (event) => {
-  // Sadece GET isteklerini cachele
-  if (event.request.method !== 'GET') return;
-  
-  // API isteklerini cache'e alma (Her zaman ağa git)
-  if (event.request.url.includes('/api/')) {
-      event.respondWith(fetch(event.request));
-      return;
+async function networkFirst(request) {
+  const cache = await caches.open(CACHE_NAME);
+
+  try {
+    const response = await fetch(request);
+    if (response.ok) {
+      await cache.put(request, response.clone());
+    }
+    return response;
+  } catch (error) {
+    const cached = await cache.match(request);
+    if (cached) {
+      return cached;
+    }
+
+    if (request.mode === 'navigate') {
+      const appShell = await cache.match('/');
+      if (appShell) {
+        return appShell;
+      }
+    }
+    throw error;
+  }
+}
+
+self.addEventListener('fetch', event => {
+  if (event.request.method !== 'GET') {
+    return;
   }
 
-  event.respondWith(
-    caches.match(event.request)
-      .then((response) => {
-        // Cache'te varsa onu döndür, yoksa internetten indir
-        return response || fetch(event.request);
-      })
-  );
+  const url = new URL(event.request.url);
+  if (url.origin !== self.location.origin || url.pathname.startsWith('/api/')) {
+    return;
+  }
+
+  event.respondWith(networkFirst(event.request));
 });
