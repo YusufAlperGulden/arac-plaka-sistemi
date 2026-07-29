@@ -36,8 +36,9 @@ window.cameraController = {
             const constraints = {
                 video: {
                     facingMode: { ideal: 'environment' },
-                    width: { ideal: 1280 },
-                    height: { ideal: 720 }
+                    width: { ideal: 1920 },
+                    height: { ideal: 1080 },
+                    frameRate: { ideal: 30, max: 60 }
                 },
                 audio: false
             };
@@ -49,9 +50,11 @@ window.cameraController = {
             }
 
             this.stream = stream;
+            await this.enableContinuousFocus(stream.getVideoTracks()[0]);
             this.videoElement.srcObject = this.stream;
             await this.waitUntilReady(this.videoElement, 8000);
             await this.videoElement.play();
+            window.dispatchEvent(new CustomEvent('camera-ready'));
             return true;
         } catch (error) {
             if (requestId !== this.requestId) {
@@ -61,6 +64,26 @@ window.cameraController = {
             this.stopCamera();
             this.handleCameraError(error);
             return false;
+        }
+    },
+
+    enableContinuousFocus: async function(track) {
+        if (!track?.getCapabilities || !track.applyConstraints) {
+            return;
+        }
+
+        try {
+            const capabilities = track.getCapabilities();
+            if (Array.isArray(capabilities.focusMode)
+                && capabilities.focusMode.includes('continuous')) {
+                await track.applyConstraints({
+                    advanced: [{ focusMode: 'continuous' }]
+                });
+            }
+        } catch (error) {
+            // Odak kontrolü tarayıcı/cihaza göre değişir; desteklenmiyorsa
+            // mevcut kamera akışını kesmeden otomatik odağa devam edilir.
+            console.debug('Sürekli odak modu uygulanamadı:', error);
         }
     },
 

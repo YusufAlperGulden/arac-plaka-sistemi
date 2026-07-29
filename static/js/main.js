@@ -10,7 +10,10 @@ document.addEventListener('DOMContentLoaded', () => {
         resolvePlateForForm,
         matchRegisteredPlate,
         mapOverlayToVideoSource,
-        buildVerticalScanCrops
+        buildVerticalScanCrops,
+        plateCandidateIoU,
+        detectPlateCandidates,
+        mapPlateCandidatesToSource
     } = window.PlateOcrUtils;
 
     // ---- PWA Service Worker Registration ----
@@ -57,6 +60,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const instructionText = document.getElementById('instruction-text');
     
     const cameraOverlayText = document.getElementById('camera-overlay-text');
+    const plateDetectionBox = document.getElementById('plate-detection-box');
+    const plateDetectionLabel = document.getElementById('plate-detection-label');
+    const autoScanStatus = document.getElementById('auto-scan-status');
     const stepPlateContainer = document.getElementById('step-plate-container');
     const stepMileageContainer = document.getElementById('step-mileage-container');
     
@@ -84,6 +90,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Tüm ekranları gizleme yardımcı fonksiyonu
     function hideAllSections() {
+        stopAutoScan();
         invalidateOcrSession();
         isOcrProcessing = false;
         const sections = document.querySelectorAll('.screen-section');
@@ -149,10 +156,18 @@ document.addEventListener('DOMContentLoaded', () => {
             ? window.cameraController.startCamera()
             : Promise.reject(new Error('Kamera denetleyicisi bulunamadı.'));
 
-        Promise.allSettled([platesPromise, cameraPromise]).then(() => {
+        Promise.allSettled([platesPromise, cameraPromise]).then(results => {
             if (triggerOcrBtn && dashboardSection.classList.contains('active')) {
-                triggerOcrBtn.textContent = '📷 Plakayı Oku';
+                triggerOcrBtn.textContent = '🔍 Şimdi Tara';
                 triggerOcrBtn.disabled = false;
+            }
+            if (results[1]?.status === 'fulfilled' && results[1].value !== false) {
+                startAutoScan();
+            } else {
+                setAutoScanStatus(
+                    'Kamera hazır değil; izin verip “Tekrar Dene” seçeneğini kullanın.',
+                    'error'
+                );
             }
         });
     }
@@ -163,8 +178,22 @@ document.addEventListener('DOMContentLoaded', () => {
     let isPlateListReady = false;
     let ocrSessionId = 0;
     const OCR_MIN_CONFIDENCE = 45;
-    const GEMINI_TIMEOUT_MS = 7000;
+    const OCR_STRONG_CONFIDENCE = 82;
+    const GEMINI_TIMEOUT_MS = 12000;
     const TESSERACT_STAGE_TIMEOUT_MS = 8000;
+    const DETECTION_MAX_WIDTH = 520;
+    const AUTO_SCAN_INTERVAL_MS = 1250;
+    const AUTO_SCAN_STABLE_FRAMES = 3;
+    const AUTO_SCAN_MIN_SCORE = 0.54;
+    const AUTO_SCAN_RETRY_COOLDOWN_MS = 30000;
+    let autoScanTimer = null;
+    let autoScanPreviousCandidate = null;
+    let autoScanStableFrames = 0;
+    let autoScanCooldownUntil = 0;
+    let autoScanBlockedCandidate = null;
+    let autoScanMissingFrames = 0;
+    let detectionCanvas = null;
+    let detectionContext = null;
 
     // Singleton Tesseract Worker Promise
     async function ensureOcrWorker() {
@@ -343,6 +372,179 @@ document.addEventListener('DOMContentLoaded', () => {
         };
     }
 
+    function captureDetectionFrame(video) {
+        const scale = Math.min(
+            1,
+            DETECTION_MAX_WIDTH / Math.max(video.videoWidth, video.videoHeight)
+        );
+        const width = Math.max(1, Math.round(video.videoWidth * scale));
+        const height = Math.max(1, Math.round(video.videoHeight * scale));
+
+        if (!detectionCanvas) {
+            detectionCanvas = document.createElement('canvas');
+            detectionContext = detectionCanvas.getContext(
+                '2d',
+                { willReadFrequently: true }
+            );
+        }
+        if (!detectionContext) {
+            throw new Error('Plaka tespit görüntüsü hazırlanamadı.');
+        }
+        if (detectionCanvas.width !== width || detectionCanvas.height !== height) {
+            detectionCanvas.width = width;
+            detectionCanvas.height = height;
+        }
+
+        detectionContext.drawImage(video, 0, 0, width, height);
+        const imageData = detectionContext.getImageData(0, 0, width, height);
+        const candidates = detectPlateCandidates(
+            imageData,
+            width,
+            height,
+            { maxCandidates: 5 }
+        );
+
+        return {
+            canvas: detectionCanvas,
+            candidates,
+            width,
+            height,
+        };
+    }
+
+    function detectionCandidateToSource(video, detection, candidate) {
+        const scaleX = video.videoWidth / detection.width;
+        const scaleY = video.videoHeight / detection.height;
+        return {
+            x: candidate.x * scaleX,
+            y: candidate.y * scaleY,
+            w: candidate.w * scaleX,
+            h: candidate.h * scaleY,
+        };
+    }
+
+    function sourceRectToVideoDisplay(video, sourceRect) {
+        const displayRect = video.getBoundingClientRect();
+        const style = getComputedStyle(video);
+        const sourceWidth = video.videoWidth;
+        const sourceHeight = video.videoHeight;
+        const scaleX = displayRect.width / sourceWidth;
+        const scaleY = displayRect.height / sourceHeight;
+        let scale = scaleX;
+
+        if (style.objectFit === 'cover') {
+            scale = Math.max(scaleX, scaleY);
+        } else if (style.objectFit === 'contain') {
+            scale = Math.min(scaleX, scaleY);
+        }
+
+        const displayedWidth = sourceWidth * scale;
+        const displayedHeight = sourceHeight * scale;
+        const offsetX = (displayRect.width - displayedWidth) / 2;
+        const offsetY = (displayRect.height - displayedHeight) / 2;
+        const left = Math.max(0, sourceRect.x * scale + offsetX);
+        const top = Math.max(0, sourceRect.y * scale + offsetY);
+        const right = Math.min(
+            displayRect.width,
+            (sourceRect.x + sourceRect.w) * scale + offsetX
+        );
+        const bottom = Math.min(
+            displayRect.height,
+            (sourceRect.y + sourceRect.h) * scale + offsetY
+        );
+
+        return {
+            x: left,
+            y: top,
+            w: Math.max(0, right - left),
+            h: Math.max(0, bottom - top),
+        };
+    }
+
+    function hideDetectionOverlay() {
+        if (!plateDetectionBox) return;
+        plateDetectionBox.classList.add('hidden');
+        plateDetectionBox.classList.remove('stable');
+        plateDetectionBox.setAttribute('aria-hidden', 'true');
+    }
+
+    function showDetectionOverlay(video, detection, candidate, isStable) {
+        if (!plateDetectionBox || !candidate) {
+            hideDetectionOverlay();
+            return;
+        }
+
+        const sourceRect = detectionCandidateToSource(video, detection, candidate);
+        const displayRect = sourceRectToVideoDisplay(video, sourceRect);
+        if (displayRect.w <= 0 || displayRect.h <= 0) {
+            hideDetectionOverlay();
+            return;
+        }
+
+        plateDetectionBox.style.left = `${displayRect.x}px`;
+        plateDetectionBox.style.top = `${displayRect.y}px`;
+        plateDetectionBox.style.width = `${displayRect.w}px`;
+        plateDetectionBox.style.height = `${displayRect.h}px`;
+        plateDetectionBox.classList.remove('hidden');
+        plateDetectionBox.classList.toggle('stable', isStable);
+        plateDetectionBox.setAttribute('aria-hidden', 'false');
+        if (plateDetectionLabel) {
+            plateDetectionLabel.textContent = isStable
+                ? 'Plaka bulundu • okunuyor'
+                : 'Plaka bulundu • sabit tutun';
+        }
+    }
+
+    function deduplicateCrops(crops, maximumCount = 6) {
+        const selected = [];
+        for (const crop of crops) {
+            if (
+                !crop
+                || crop.w <= 0
+                || crop.h <= 0
+                || selected.some(existing => plateCandidateIoU(existing, crop) >= 0.76)
+            ) {
+                continue;
+            }
+            selected.push(crop);
+            if (selected.length >= maximumCount) {
+                break;
+            }
+        }
+        return selected;
+    }
+
+    function buildOcrCropRegions(video, preferredDetection = null) {
+        const detection = preferredDetection || captureDetectionFrame(video);
+        const automaticCrops = mapPlateCandidatesToSource(
+            detection.candidates,
+            {
+                detectionWidth: detection.width,
+                detectionHeight: detection.height,
+                sourceWidth: video.videoWidth,
+                sourceHeight: video.videoHeight,
+            }
+        );
+
+        const roiBox = document.getElementById('ocr-roi-box');
+        const computedStyle = getComputedStyle(video);
+        const fallbackCrop = mapOverlayToVideoSource({
+            videoWidth: video.videoWidth,
+            videoHeight: video.videoHeight,
+            displayRect: video.getBoundingClientRect(),
+            overlayRect: roiBox.getBoundingClientRect(),
+            objectFit: computedStyle.objectFit,
+            objectPosition: computedStyle.objectPosition
+        });
+        const fallbackCrops = buildVerticalScanCrops(fallbackCrop, video.videoHeight);
+        const sourceCrops = deduplicateCrops([
+            ...automaticCrops,
+            ...fallbackCrops,
+        ]);
+
+        return { detection, sourceCrops };
+    }
+
     function captureVideoCrop(video, sourceCrop) {
         const canvas = document.createElement('canvas');
         const ocrSize = calculateOcrSize(sourceCrop.w, sourceCrop.h);
@@ -384,6 +586,164 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         ctx.putImageData(imageData, 0, 0);
     }
+
+    function processAutoContrast(ctx, width, height) {
+        const imageData = ctx.getImageData(0, 0, width, height);
+        const data = imageData.data;
+        const grayscale = new Uint8Array(width * height);
+        const histogram = new Uint32Array(256);
+
+        for (let index = 0, pixel = 0; index < data.length; index += 4, pixel += 1) {
+            const gray = Math.round(
+                0.299 * data[index]
+                + 0.587 * data[index + 1]
+                + 0.114 * data[index + 2]
+            );
+            grayscale[pixel] = gray;
+            histogram[gray] += 1;
+        }
+
+        const lowTarget = grayscale.length * 0.03;
+        const highTarget = grayscale.length * 0.97;
+        let cumulative = 0;
+        let low = 0;
+        let high = 255;
+        for (let value = 0; value < 256; value += 1) {
+            cumulative += histogram[value];
+            if (cumulative >= lowTarget) {
+                low = value;
+                break;
+            }
+        }
+        cumulative = 0;
+        for (let value = 0; value < 256; value += 1) {
+            cumulative += histogram[value];
+            if (cumulative >= highTarget) {
+                high = value;
+                break;
+            }
+        }
+
+        const range = Math.max(1, high - low);
+        for (let pixel = 0, index = 0; pixel < grayscale.length; pixel += 1, index += 4) {
+            const stretched = Math.max(
+                0,
+                Math.min(255, Math.round((grayscale[pixel] - low) * 255 / range))
+            );
+            data[index] = data[index + 1] = data[index + 2] = stretched;
+        }
+        ctx.putImageData(imageData, 0, 0);
+    }
+
+    function calculateOtsuThreshold(data) {
+        const histogram = new Uint32Array(256);
+        let total = 0;
+        let weightedTotal = 0;
+
+        for (let index = 0; index < data.length; index += 4) {
+            const gray = Math.round(
+                0.299 * data[index]
+                + 0.587 * data[index + 1]
+                + 0.114 * data[index + 2]
+            );
+            histogram[gray] += 1;
+            weightedTotal += gray;
+            total += 1;
+        }
+
+        let backgroundWeight = 0;
+        let backgroundSum = 0;
+        let bestVariance = -1;
+        let bestThreshold = 128;
+
+        for (let threshold = 0; threshold < 256; threshold += 1) {
+            backgroundWeight += histogram[threshold];
+            if (backgroundWeight === 0) continue;
+
+            const foregroundWeight = total - backgroundWeight;
+            if (foregroundWeight === 0) break;
+
+            backgroundSum += threshold * histogram[threshold];
+            const backgroundMean = backgroundSum / backgroundWeight;
+            const foregroundMean = (
+                weightedTotal - backgroundSum
+            ) / foregroundWeight;
+            const variance = (
+                backgroundWeight
+                * foregroundWeight
+                * (backgroundMean - foregroundMean) ** 2
+            );
+            if (variance > bestVariance) {
+                bestVariance = variance;
+                bestThreshold = threshold;
+            }
+        }
+        return bestThreshold;
+    }
+
+    function processOtsuThreshold(ctx, width, height) {
+        const imageData = ctx.getImageData(0, 0, width, height);
+        const threshold = calculateOtsuThreshold(imageData.data);
+        const data = imageData.data;
+        for (let index = 0; index < data.length; index += 4) {
+            const gray = (
+                0.299 * data[index]
+                + 0.587 * data[index + 1]
+                + 0.114 * data[index + 2]
+            );
+            const value = gray > threshold ? 255 : 0;
+            data[index] = data[index + 1] = data[index + 2] = value;
+        }
+        ctx.putImageData(imageData, 0, 0);
+    }
+
+    function processAdaptiveThreshold(ctx, width, height) {
+        const imageData = ctx.getImageData(0, 0, width, height);
+        const data = imageData.data;
+        const grayscale = new Uint8Array(width * height);
+        const stride = width + 1;
+        const integral = new Float64Array((width + 1) * (height + 1));
+
+        for (let y = 0; y < height; y += 1) {
+            let rowSum = 0;
+            for (let x = 0; x < width; x += 1) {
+                const dataIndex = (y * width + x) * 4;
+                const gray = Math.round(
+                    0.299 * data[dataIndex]
+                    + 0.587 * data[dataIndex + 1]
+                    + 0.114 * data[dataIndex + 2]
+                );
+                grayscale[y * width + x] = gray;
+                rowSum += gray;
+                integral[(y + 1) * stride + x + 1] = (
+                    integral[y * stride + x + 1] + rowSum
+                );
+            }
+        }
+
+        const radius = Math.max(10, Math.round(Math.min(width, height) * 0.10));
+        for (let y = 0; y < height; y += 1) {
+            const top = Math.max(0, y - radius);
+            const bottom = Math.min(height, y + radius + 1);
+            for (let x = 0; x < width; x += 1) {
+                const left = Math.max(0, x - radius);
+                const right = Math.min(width, x + radius + 1);
+                const area = (right - left) * (bottom - top);
+                const localSum = (
+                    integral[bottom * stride + right]
+                    - integral[top * stride + right]
+                    - integral[bottom * stride + left]
+                    + integral[top * stride + left]
+                );
+                const localMean = localSum / area;
+                const value = grayscale[y * width + x] < localMean * 0.84 ? 0 : 255;
+                const dataIndex = (y * width + x) * 4;
+                data[dataIndex] = data[dataIndex + 1] = data[dataIndex + 2] = value;
+            }
+        }
+
+        ctx.putImageData(imageData, 0, 0);
+    }
     
     function processThreshold(ctx, width, height, thresholdValue) {
         const imageData = ctx.getImageData(0, 0, width, height);
@@ -407,21 +767,32 @@ document.addEventListener('DOMContentLoaded', () => {
         ctx.putImageData(imageData, 0, 0);
     }
 
-    async function requestServerOcr(canvas) {
+    async function requestServerOcr(cropCaptures) {
         const abortController = new AbortController();
         const timeoutId = setTimeout(() => abortController.abort(), GEMINI_TIMEOUT_MS);
+        const serverCandidates = cropCaptures.slice(0, 3);
 
         try {
             const response = await fetch('/api/gemini-ocr', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ image: canvas.toDataURL('image/jpeg', 0.86) }),
+                body: JSON.stringify({
+                    images: serverCandidates.map(
+                        capture => capture.canvas.toDataURL('image/jpeg', 0.86)
+                    )
+                }),
                 signal: abortController.signal
             });
             const data = await response.json().catch(() => ({}));
 
             if (response.ok && data.success && data.plate) {
-                return parseTurkishPlate(data.plate);
+                const plate = parseTurkishPlate(data.plate);
+                if (!plate) return null;
+
+                const candidateIndex = Number.isInteger(data.candidate_index)
+                    ? Math.max(0, Math.min(serverCandidates.length - 1, data.candidate_index))
+                    : 0;
+                return { plate, candidateIndex };
             }
 
             if (response.status === 401) {
@@ -446,11 +817,12 @@ document.addEventListener('DOMContentLoaded', () => {
         const registeredPlates = getRegisteredPlateOptions()
             .map(option => option.dataset.plate || option.value);
         const candidates = [];
+        const votes = new Map();
         const stages = [
+            { name: 'AutoContrast', apply: (c, w, h) => processAutoContrast(c, w, h) },
+            { name: 'Adaptive', apply: (c, w, h) => processAdaptiveThreshold(c, w, h) },
+            { name: 'Otsu', apply: (c, w, h) => processOtsuThreshold(c, w, h) },
             { name: 'Original', apply: () => {} },
-            { name: 'Grayscale', apply: (c, w, h) => processGrayscale(c, w, h) },
-            { name: 'Threshold', apply: (c, w, h) => processThreshold(c, w, h, 135) },
-            { name: 'Inverted', apply: (c, w, h) => processInvertedThreshold(c, w, h, 135) }
         ];
 
         for (const stage of stages) {
@@ -479,10 +851,13 @@ document.addEventListener('DOMContentLoaded', () => {
                     : parseTurkishPlate(recognizedText);
 
                 if (parsed && (confidence >= OCR_MIN_CONFIDENCE || registeredMatch)) {
+                    const corrected = Boolean(
+                        registeredMatch?.corrected || parsed.ocrCorrected
+                    );
                     const candidate = {
                         text: parsed.normalized,
                         confidence,
-                        corrected: Boolean(registeredMatch?.corrected),
+                        corrected,
                         parts: [
                             parsed.provinceCode.toString().padStart(2, '0'),
                             parsed.letters,
@@ -491,25 +866,62 @@ document.addEventListener('DOMContentLoaded', () => {
                         canvasContext: ctx.getImageData(0, 0, canvas.width, canvas.height),
                         originalCanvasContext: originalImageData,
                         canvasW: canvas.width,
-                        canvasH: canvas.height
+                        canvasH: canvas.height,
+                        cropIndex,
+                        stage: stage.name,
                     };
                     candidates.push(candidate);
 
-                    // Geçerli bir tam plaka minimum güven eşiğini geçtiğinde diğer
-                    // filtreleri bekletmeden sonucu göster; mobilde gecikmeyi azaltır.
-                    if (confidence >= OCR_MIN_CONFIDENCE && !registeredMatch?.corrected) {
+                    const vote = votes.get(candidate.text) || {
+                        count: 0,
+                        best: candidate,
+                        variants: new Set(),
+                    };
+                    const variantKey = `${cropIndex}:${stage.name}`;
+                    if (!vote.variants.has(variantKey)) {
+                        vote.variants.add(variantKey);
+                        vote.count += 1;
+                    }
+                    if (candidate.confidence > vote.best.confidence) {
+                        vote.best = candidate;
+                    }
+                    votes.set(candidate.text, vote);
+
+                    // Çok güçlü tek sonuçta veya iki bağımsız görüntü varyantı aynı
+                    // plakada birleştiğinde erken dön; ilk düşük güvenli sözdizimsel
+                    // eşleşmeyi artık doğrudan kabul etmiyoruz.
+                    if (
+                        confidence >= OCR_STRONG_CONFIDENCE
+                        && !corrected
+                    ) {
                         return candidate;
+                    }
+                    if (vote.count >= 2 && vote.best.confidence >= OCR_MIN_CONFIDENCE) {
+                        return {
+                            ...vote.best,
+                            consensus: vote.count,
+                        };
                     }
                 }
             }
         }
 
         candidates.sort((left, right) => {
+            const leftVotes = votes.get(left.text)?.count || 0;
+            const rightVotes = votes.get(right.text)?.count || 0;
             const leftRegistered = findRegisteredPlateOption(left.text) ? 1 : 0;
             const rightRegistered = findRegisteredPlateOption(right.text) ? 1 : 0;
-            return rightRegistered - leftRegistered || right.confidence - left.confidence;
+            return (
+                rightVotes - leftVotes
+                || rightRegistered - leftRegistered
+                || Number(left.corrected) - Number(right.corrected)
+                || right.confidence - left.confidence
+            );
         });
-        return candidates[0] || null;
+        const best = candidates[0] || null;
+        return best
+            ? { ...best, consensus: votes.get(best.text)?.count || 1 }
+            : null;
     }
 
     function showOcrResult(bestMatch, source) {
@@ -533,8 +945,15 @@ document.addEventListener('DOMContentLoaded', () => {
             ocrConfidence.textContent = 'Sunucu OCR sonucu';
             ocrConfidence.style.color = '#4ade80';
         } else {
-            const correctionNote = bestMatch.corrected ? ' • kayıtlı plakayla düzeltildi' : '';
-            ocrConfidence.textContent = `%${Math.round(bestMatch.confidence)} • Yerel OCR${correctionNote}`;
+            const correctionNote = bestMatch.corrected ? ' • OCR karakterleri düzeltildi' : '';
+            const consensusNote = bestMatch.consensus > 1
+                ? ` • ${bestMatch.consensus} sonuç eşleşti`
+                : '';
+            ocrConfidence.textContent = (
+                `%${Math.round(bestMatch.confidence)} • Yerel OCR`
+                + correctionNote
+                + consensusNote
+            );
             ocrConfidence.style.color = bestMatch.confidence > 80 ? '#4ade80' : '#facc15';
         }
 
@@ -556,107 +975,294 @@ document.addEventListener('DOMContentLoaded', () => {
         ocrConfirmModal.classList.remove('hidden');
     }
 
-    if (triggerOcrBtn) {
-        triggerOcrBtn.addEventListener('click', async () => {
-            const video = window.cameraController?.videoElement;
-            const videoReady = video
-                && video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA
-                && video.videoWidth > 0
-                && video.videoHeight > 0;
+    function isVideoReady(video) {
+        return Boolean(
+            video
+            && video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA
+            && video.videoWidth > 0
+            && video.videoHeight > 0
+        );
+    }
 
-            if (isOcrProcessing) {
-                return;
-            }
-            if (!isPlateListReady) {
+    function setAutoScanStatus(message, tone = 'info') {
+        if (!autoScanStatus) return;
+        const colors = {
+            info: '#93c5fd',
+            searching: '#cbd5e1',
+            found: '#facc15',
+            success: '#4ade80',
+            error: '#fca5a5',
+        };
+        autoScanStatus.textContent = message;
+        autoScanStatus.style.color = colors[tone] || colors.info;
+    }
+
+    async function performPlateOcr({
+        preferredDetection = null,
+        automatic = false,
+    } = {}) {
+        const video = window.cameraController?.videoElement;
+        if (isOcrProcessing) {
+            return false;
+        }
+        if (!isPlateListReady) {
+            if (!automatic) {
                 window.showToast('Kayıtlı plakalar henüz yükleniyor.', 'warning');
-                return;
             }
-            if (!videoReady) {
+            return false;
+        }
+        if (!isVideoReady(video)) {
+            if (!automatic) {
                 window.showToast('Kamera görüntüsü henüz hazır değil.', 'error');
-                return;
+            }
+            return false;
+        }
+
+        isOcrProcessing = true;
+        triggerOcrBtn.textContent = '⏳ Plaka okunuyor...';
+        triggerOcrBtn.disabled = true;
+        setAutoScanStatus('Plaka kırpıldı; metin okunuyor…', 'found');
+        const sessionId = ocrSessionId;
+        let succeeded = false;
+
+        try {
+            const { detection, sourceCrops } = buildOcrCropRegions(
+                video,
+                preferredDetection
+            );
+            const cropCaptures = sourceCrops.map(crop => captureVideoCrop(video, crop));
+            const primaryCapture = cropCaptures[0];
+            if (!primaryCapture) {
+                throw new Error('OCR için uygun plaka kırpımı oluşturulamadı.');
             }
 
-            isOcrProcessing = true;
-            triggerOcrBtn.textContent = '⏳ Plaka okunuyor...';
-            triggerOcrBtn.disabled = true;
-            const sessionId = ocrSessionId;
+            if (detection.candidates[0]) {
+                showDetectionOverlay(
+                    video,
+                    detection,
+                    detection.candidates[0],
+                    true
+                );
+            }
 
-            try {
-                const roiBox = document.getElementById('ocr-roi-box');
-                const computedStyle = getComputedStyle(video);
-                const sourceCrop = mapOverlayToVideoSource({
-                    videoWidth: video.videoWidth,
-                    videoHeight: video.videoHeight,
-                    displayRect: video.getBoundingClientRect(),
-                    overlayRect: roiBox.getBoundingClientRect(),
-                    objectFit: computedStyle.objectFit,
-                    objectPosition: computedStyle.objectPosition
-                });
+            if (ocrOriginalCanvas) {
+                ocrOriginalCanvas.width = primaryCapture.canvas.width;
+                ocrOriginalCanvas.height = primaryCapture.canvas.height;
+                ocrOriginalCanvas
+                    .getContext('2d')
+                    .putImageData(primaryCapture.originalImageData, 0, 0);
+            }
 
-                const sourceCrops = buildVerticalScanCrops(sourceCrop, video.videoHeight);
-                const cropCaptures = sourceCrops.map(crop => captureVideoCrop(video, crop));
-                const primaryCapture = cropCaptures[0];
+            const serverResult = await requestServerOcr(cropCaptures);
+            if (sessionId !== ocrSessionId) return false;
 
-                if (ocrOriginalCanvas) {
-                    ocrOriginalCanvas.width = primaryCapture.canvas.width;
-                    ocrOriginalCanvas.height = primaryCapture.canvas.height;
-                    ocrOriginalCanvas
-                        .getContext('2d')
-                        .putImageData(primaryCapture.originalImageData, 0, 0);
-                }
+            let bestMatch = null;
+            let source = null;
+            if (serverResult) {
+                const parsed = serverResult.plate;
+                const selectedCapture = (
+                    cropCaptures[serverResult.candidateIndex] || primaryCapture
+                );
+                bestMatch = {
+                    text: parsed.normalized,
+                    confidence: null,
+                    corrected: Boolean(parsed.ocrCorrected),
+                    parts: [
+                        parsed.provinceCode.toString().padStart(2, '0'),
+                        parsed.letters,
+                        parsed.digits
+                    ],
+                    canvasContext: selectedCapture.originalImageData,
+                    originalCanvasContext: selectedCapture.originalImageData,
+                    canvasW: selectedCapture.canvas.width,
+                    canvasH: selectedCapture.canvas.height
+                };
+                source = 'gemini';
+            } else {
+                bestMatch = await requestLocalOcr(cropCaptures.slice(0, 4), sessionId);
+                source = bestMatch ? 'tesseract' : null;
+            }
 
-                const serverResult = await requestServerOcr(primaryCapture.canvas);
-                if (sessionId !== ocrSessionId) return;
-
-                let bestMatch = null;
-                let source = null;
-                if (serverResult) {
-                    bestMatch = {
-                        text: serverResult.normalized,
-                        confidence: null,
-                        corrected: false,
-                        parts: [
-                            serverResult.provinceCode.toString().padStart(2, '0'),
-                            serverResult.letters,
-                            serverResult.digits
-                        ],
-                        canvasContext: primaryCapture.originalImageData,
-                        originalCanvasContext: primaryCapture.originalImageData,
-                        canvasW: primaryCapture.canvas.width,
-                        canvasH: primaryCapture.canvas.height
-                    };
-                    source = 'gemini';
-                } else {
-                    bestMatch = await requestLocalOcr(cropCaptures, sessionId);
-                    source = bestMatch ? 'tesseract' : null;
-                }
-
-                if (sessionId !== ocrSessionId) return;
-                if (bestMatch) {
-                    showOcrResult(bestMatch, source);
-                } else {
+            if (sessionId !== ocrSessionId) return false;
+            if (bestMatch) {
+                hideDetectionOverlay();
+                setAutoScanStatus('Plaka otomatik okundu; sonucu onaylayın.', 'success');
+                showOcrResult(bestMatch, source);
+                succeeded = true;
+            } else {
+                setAutoScanStatus(
+                    'Plaka bulundu ancak metin net değildi; kamerayı sabit tutun.',
+                    'error'
+                );
+                if (!automatic) {
                     window.showToast(
-                        'Plaka net okunamadı. Tek plakayı çerçeveye ortalayıp tekrar deneyin.',
+                        'Plaka net okunamadı. Kamerayı sabit tutup tekrar deneyin.',
                         'error'
                     );
                 }
-            } catch (error) {
-                if (error instanceof OcrTimeoutError || error.name === 'OcrTimeoutError') {
-                    await resetOcrWorker();
+            }
+        } catch (error) {
+            if (error instanceof OcrTimeoutError || error.name === 'OcrTimeoutError') {
+                await resetOcrWorker();
+                setAutoScanStatus('Yerel OCR zaman aşımına uğradı; tekrar denenebilir.', 'error');
+                if (!automatic) {
                     window.showToast('Yerel OCR zaman aşımına uğradı; tekrar deneyin.', 'error');
-                } else if (sessionId === ocrSessionId) {
-                    console.error('OCR hatası:', error);
+                }
+            } else if (sessionId === ocrSessionId) {
+                console.error('OCR hatası:', error);
+                setAutoScanStatus(
+                    'Okuma tamamlanamadı; bağlantıyı ve kamera netliğini kontrol edin.',
+                    'error'
+                );
+                if (!automatic) {
                     window.showToast(
                         'Plaka okunamadı. İnternet bağlantısını ve kamera netliğini kontrol edin.',
                         'error'
                     );
                 }
-            } finally {
-                isOcrProcessing = false;
-                if (triggerOcrBtn && dashboardSection.classList.contains('active')) {
-                    triggerOcrBtn.textContent = '📷 Plakayı Oku';
-                    triggerOcrBtn.disabled = false;
+            }
+        } finally {
+            isOcrProcessing = false;
+            if (triggerOcrBtn && dashboardSection.classList.contains('active')) {
+                triggerOcrBtn.textContent = '🔍 Şimdi Tara';
+                triggerOcrBtn.disabled = false;
+            }
+        }
+
+        return succeeded;
+    }
+
+    function scheduleAutoScan(delay = AUTO_SCAN_INTERVAL_MS) {
+        clearTimeout(autoScanTimer);
+        autoScanTimer = setTimeout(runAutoScanFrame, delay);
+    }
+
+    function stopAutoScan() {
+        clearTimeout(autoScanTimer);
+        autoScanTimer = null;
+        autoScanPreviousCandidate = null;
+        autoScanStableFrames = 0;
+        autoScanBlockedCandidate = null;
+        autoScanMissingFrames = 0;
+        hideDetectionOverlay();
+    }
+
+    function startAutoScan() {
+        stopAutoScan();
+        autoScanCooldownUntil = 0;
+        setAutoScanStatus('Otomatik tarama açık • plakayı kameraya gösterin.', 'searching');
+        scheduleAutoScan(180);
+    }
+
+    async function runAutoScanFrame() {
+        autoScanTimer = null;
+        const video = window.cameraController?.videoElement;
+        const modalVisible = ocrConfirmModal
+            && !ocrConfirmModal.classList.contains('hidden');
+        const shouldContinue = (
+            dashboardSection.classList.contains('active')
+            && state.currentStep === 1
+            && !document.hidden
+            && !modalVisible
+        );
+        if (!shouldContinue) {
+            return;
+        }
+
+        if (!isVideoReady(video) || isOcrProcessing || !isPlateListReady) {
+            scheduleAutoScan();
+            return;
+        }
+
+        try {
+            const detection = captureDetectionFrame(video);
+            const candidate = detection.candidates[0] || null;
+            if (!candidate || candidate.score < AUTO_SCAN_MIN_SCORE) {
+                autoScanMissingFrames += 1;
+                if (autoScanMissingFrames >= 2) {
+                    autoScanBlockedCandidate = null;
+                    autoScanCooldownUntil = 0;
                 }
+                autoScanPreviousCandidate = null;
+                autoScanStableFrames = 0;
+                hideDetectionOverlay();
+                setAutoScanStatus('Plaka aranıyor…', 'searching');
+                scheduleAutoScan();
+                return;
+            }
+            autoScanMissingFrames = 0;
+
+            if (
+                autoScanBlockedCandidate
+                && plateCandidateIoU(autoScanBlockedCandidate, candidate) < 0.35
+            ) {
+                autoScanBlockedCandidate = null;
+                autoScanCooldownUntil = 0;
+            }
+
+            const stableWithPrevious = (
+                autoScanPreviousCandidate
+                && plateCandidateIoU(autoScanPreviousCandidate, candidate) >= 0.52
+            );
+            autoScanStableFrames = stableWithPrevious
+                ? autoScanStableFrames + 1
+                : 1;
+            autoScanPreviousCandidate = candidate;
+
+            const stable = autoScanStableFrames >= AUTO_SCAN_STABLE_FRAMES;
+            showDetectionOverlay(video, detection, candidate, stable);
+            const waitingAfterFailure = (
+                stable
+                && Date.now() < autoScanCooldownUntil
+                && (
+                    !autoScanBlockedCandidate
+                    || plateCandidateIoU(autoScanBlockedCandidate, candidate) >= 0.35
+                )
+            );
+            if (waitingAfterFailure) {
+                setAutoScanStatus(
+                    'Netliği düzeltin veya “Şimdi Tara” düğmesine dokunun.',
+                    'found'
+                );
+            } else {
+                setAutoScanStatus(
+                    stable
+                        ? 'Plaka bulundu; otomatik okunuyor…'
+                        : 'Plaka bulundu; kısa süre sabit tutun.',
+                    stable ? 'success' : 'found'
+                );
+            }
+
+            if (stable && Date.now() >= autoScanCooldownUntil) {
+                const succeeded = await performPlateOcr({
+                    preferredDetection: detection,
+                    automatic: true,
+                });
+                if (succeeded) {
+                    return;
+                }
+                // Bekleme süresini uzun OCR işlemi bittikten sonra başlat. Aynı
+                // sabit yanlış aday, kullanıcı kadrajı değiştirmeden tekrar
+                // tekrar sunucuya/Tesseract'a gönderilmez.
+                autoScanBlockedCandidate = candidate;
+                autoScanCooldownUntil = Number.POSITIVE_INFINITY;
+                autoScanPreviousCandidate = null;
+                autoScanStableFrames = 0;
+            }
+        } catch (error) {
+            console.warn('Otomatik plaka tespiti başarısız oldu:', error);
+            hideDetectionOverlay();
+            setAutoScanStatus('Otomatik tespit yeniden deneniyor…', 'error');
+        }
+
+        scheduleAutoScan();
+    }
+
+    if (triggerOcrBtn) {
+        triggerOcrBtn.addEventListener('click', async () => {
+            const succeeded = await performPlateOcr();
+            if (!succeeded) {
+                autoScanCooldownUntil = Date.now() + AUTO_SCAN_RETRY_COOLDOWN_MS;
             }
         });
     }
@@ -690,6 +1296,8 @@ document.addEventListener('DOMContentLoaded', () => {
         ocrRetryBtn.addEventListener('click', () => {
             ocrConfirmModal.classList.add('hidden');
             invalidateOcrSession();
+            autoScanCooldownUntil = 0;
+            startAutoScan();
         });
     }
 
@@ -732,6 +1340,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Global Camera Cleanup Logic
     function closeCameraSafely() {
+        stopAutoScan();
         invalidateOcrSession();
         if (window.cameraController) {
             window.cameraController.stopCamera();
@@ -741,9 +1350,10 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         isOcrProcessing = false;
         if (triggerOcrBtn) {
-            triggerOcrBtn.innerHTML = '📷 Plakayı Oku';
+            triggerOcrBtn.innerHTML = '🔍 Şimdi Tara';
             triggerOcrBtn.disabled = false;
         }
+        setAutoScanStatus('Otomatik tarama durduruldu.', 'info');
         
         currentOcrPlate = null;
         currentOcrSource = null;
@@ -755,16 +1365,24 @@ document.addEventListener('DOMContentLoaded', () => {
     // Bind cleanup to navigation and page close events
     window.addEventListener("pagehide", closeCameraSafely);
     window.addEventListener("beforeunload", closeCameraSafely);
+    window.addEventListener("camera-ready", () => {
+        if (dashboardSection.classList.contains('active') && state.currentStep === 1) {
+            startAutoScan();
+        }
+    });
     document.addEventListener("visibilitychange", () => {
         if (document.hidden) {
             closeCameraSafely();
         } else if (dashboardSection.classList.contains('active') && state.currentStep === 1) {
             triggerOcrBtn.disabled = true;
             triggerOcrBtn.textContent = '⏳ Kamera hazırlanıyor...';
-            window.cameraController?.startCamera().finally(() => {
+            window.cameraController?.startCamera().then(started => {
                 if (dashboardSection.classList.contains('active')) {
-                    triggerOcrBtn.textContent = '📷 Plakayı Oku';
+                    triggerOcrBtn.textContent = '🔍 Şimdi Tara';
                     triggerOcrBtn.disabled = false;
+                    if (started !== false) {
+                        startAutoScan();
+                    }
                 }
             });
         }
@@ -1081,6 +1699,36 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         viewVehicleReportBtn.disabled = true;
     }
+
+    // Android WebView geri tuşu için SPA içi güvenli gezinme kancası.
+    window.handleNativeBack = function() {
+        if (ocrConfirmModal && !ocrConfirmModal.classList.contains('hidden')) {
+            closeCameraSafely();
+            return true;
+        }
+
+        if (reportDetailSection.classList.contains('active')) {
+            backToReportsMenuBtn.click();
+            return true;
+        }
+
+        if (vehicleReportSelectionSection.classList.contains('active')) {
+            backFromVehicleSelectBtn.click();
+            return true;
+        }
+
+        if (reportsMenuSection.classList.contains('active')) {
+            showActionSelection();
+            return true;
+        }
+
+        if (dashboardSection.classList.contains('active')) {
+            showActionSelection();
+            return true;
+        }
+
+        return false;
+    };
 
     // Çıkış Yapma
     function logout() {

@@ -9,9 +9,9 @@ from PIL import Image
 import app as app_module
 
 
-def make_image_data_url(declared_mime="image/jpeg"):
+def make_image_data_url(declared_mime="image/jpeg", size=(320, 120)):
     buffer = io.BytesIO()
-    Image.new("RGB", (320, 120), "white").save(buffer, format="JPEG")
+    Image.new("RGB", size, "white").save(buffer, format="JPEG")
     encoded = base64.b64encode(buffer.getvalue()).decode("ascii")
     return f"data:{declared_mime};base64,{encoded}"
 
@@ -39,6 +39,7 @@ class OcrApiTests(unittest.TestCase):
             SESSION_COOKIE_SECURE=False,
             RATELIMIT_ENABLED=False,
         )
+        app_module.limiter.reset()
         self.client = app_module.app.test_client()
 
     def tearDown(self):
@@ -61,6 +62,30 @@ class OcrApiTests(unittest.TestCase):
         for invalid in ("82ABC123", "34ABC1234", "34A123", None):
             with self.subTest(invalid=invalid):
                 self.assertIsNone(app_module.normalize_turkish_plate(invalid))
+
+    def test_ocr_normalization_repairs_position_specific_confusions(self):
+        cases = {
+            "35 VEB OO1": "35VEB001",
+            "35 VEB 00I": "35VEB001",
+            "O6 A 12345": "06A12345",
+        }
+        for raw, expected in cases.items():
+            with self.subTest(raw=raw):
+                self.assertEqual(
+                    app_module.normalize_turkish_ocr_plate(raw),
+                    expected,
+                )
+
+        for ambiguous_or_invalid in (
+            "99 ABC 1234",
+            "77G5Z33",
+            "36A0Q348",
+            "46C1S05",
+        ):
+            with self.subTest(ambiguous_or_invalid=ambiguous_or_invalid):
+                self.assertIsNone(
+                    app_module.normalize_turkish_ocr_plate(ambiguous_or_invalid)
+                )
 
     def test_requires_an_authenticated_session(self):
         response = self.client.post(
@@ -124,6 +149,7 @@ class OcrApiTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.get_json()["plate"], "34KM4969")
+        self.assertEqual(response.get_json()["candidate_index"], 0)
         self.assertEqual(len(fake_client.models.calls), 1)
         call = fake_client.models.calls[0]
         self.assertEqual(call["model"], app_module.GEMINI_MODEL)
@@ -134,6 +160,77 @@ class OcrApiTests(unittest.TestCase):
             call["config"].response_mime_type,
             "application/json",
         )
+
+    def test_accepts_multiple_auto_crops_and_returns_selected_index(self):
+        self.authenticate()
+        fake_client = FakeGeminiClient(json.dumps({
+            "plate": "35 VEB 001",
+            "candidate_index": 1,
+        }))
+        app_module.gemini_client = fake_client
+
+        response = self.client.post(
+            "/api/gemini-ocr",
+            json={
+                "images": [
+                    make_image_data_url(),
+                    make_image_data_url(),
+                    make_image_data_url(),
+                ],
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json()["plate"], "35VEB001")
+        self.assertEqual(response.get_json()["candidate_index"], 1)
+        call = fake_client.models.calls[0]
+        self.assertEqual(len(call["contents"]), 4)
+
+    def test_rejects_more_than_three_auto_crops(self):
+        self.authenticate()
+        app_module.gemini_client = FakeGeminiClient('{"plate":"34KM4969"}')
+
+        response = self.client.post(
+            "/api/gemini-ocr",
+            json={"images": [make_image_data_url()] * 4},
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("3", response.get_json()["message"])
+
+    def test_rejects_excessive_total_crop_resolution(self):
+        self.authenticate()
+        app_module.gemini_client = FakeGeminiClient(
+            '{"plate":"34KM4969","candidate_index":0}'
+        )
+
+        response = self.client.post(
+            "/api/gemini-ocr",
+            json={
+                "images": [
+                    make_image_data_url(size=(3000, 3000)),
+                    make_image_data_url(size=(3000, 3000)),
+                    make_image_data_url(size=(3000, 3000)),
+                ],
+            },
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("çözünürlüğü", response.get_json()["message"])
+
+    def test_rejects_invalid_candidate_index_for_multiple_crops(self):
+        self.authenticate()
+        app_module.gemini_client = FakeGeminiClient(
+            '{"plate":"35VEB001","candidate_index":4}'
+        )
+
+        response = self.client.post(
+            "/api/gemini-ocr",
+            json={"images": [make_image_data_url(), make_image_data_url()]},
+        )
+
+        self.assertEqual(response.status_code, 502)
+        self.assertTrue(response.get_json()["fallback_available"])
 
     def test_invalid_model_plate_triggers_local_fallback(self):
         self.authenticate()
