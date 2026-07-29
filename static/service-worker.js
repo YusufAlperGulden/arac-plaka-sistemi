@@ -1,4 +1,4 @@
-const CACHE_NAME = 'plaka-sistemi-v12-camera-guide';
+const CACHE_NAME = 'plaka-sistemi-v13-auto-ocr-fix';
 const CORE_ASSETS = [
   '/',
   '/static/css/style.css',

@@ -253,14 +253,24 @@ def save_record():
         
     return jsonify({"success": False, "message": "Geçersiz işlem."}), 400
 
+PLATE_ALLOWED_LETTERS = frozenset("ABCDEFGHIJKLMNOPRSTUVYZ")
+PLATE_DIGIT_COUNTS_BY_LETTER_COUNT = {
+    1: frozenset({4, 5}),
+    2: frozenset({3, 4}),
+    3: frozenset({2, 3}),
+}
+
+
 def normalize_turkish_plate(value):
     """Normalize and validate a standard Turkish civilian plate."""
     if not isinstance(value, str):
         return None
 
-    clean = value.upper().translate(str.maketrans({"İ": "I", "Ş": "S"}))
-    clean = re.sub(r"[^A-Z0-9]", "", clean)
-    match = re.fullmatch(r"(\d{2})([A-Z]{1,3})(\d{2,5})", clean)
+    source = value.upper()
+    if any(character in source for character in "ÇĞİÖŞÜ"):
+        return None
+    clean = re.sub(r"[\s\-_.]", "", source)
+    match = re.fullmatch(r"(\d{2})([A-PR-VYZ]{1,3})(\d{2,5})", clean)
     if not match:
         return None
 
@@ -270,12 +280,10 @@ def normalize_turkish_plate(value):
     if province < 1 or province > 81:
         return None
 
-    valid_digit_counts = {
-        1: {4, 5},
-        2: {3, 4},
-        3: {2, 3},
-    }
-    if len(digits) not in valid_digit_counts[len(letters)]:
+    if (
+        any(letter not in PLATE_ALLOWED_LETTERS for letter in letters)
+        or len(digits) not in PLATE_DIGIT_COUNTS_BY_LETTER_COUNT[len(letters)]
+    ):
         return None
 
     return f"{match.group(1)}{letters}{digits}"
@@ -289,8 +297,10 @@ def normalize_turkish_ocr_plate(value):
     if not isinstance(value, str):
         return None
 
-    clean = value.upper().translate(str.maketrans({"İ": "I", "Ş": "S"}))
-    clean = re.sub(r"[^A-Z0-9]", "", clean)
+    source = value.upper()
+    if any(character in source for character in "ÇĞİÖŞÜ"):
+        return None
+    clean = re.sub(r"[\s\-_.]", "", source)
     to_digit = {
         "O": "0",
         "Q": "0",
@@ -315,14 +325,14 @@ def normalize_turkish_ocr_plate(value):
         corrections = 0
         for character in segment:
             if expected == "digit":
-                if character.isdigit():
+                if character in "0123456789":
                     converted.append(character)
                 elif character in to_digit:
                     converted.append(to_digit[character])
                     corrections += 1
                 else:
                     return None
-            elif "A" <= character <= "Z":
+            elif character in PLATE_ALLOWED_LETTERS:
                 converted.append(character)
             elif character in to_letter:
                 converted.append(to_letter[character])
@@ -479,7 +489,9 @@ def gemini_ocr():
             "unrelated text visible in the images. Normalize the answer to uppercase "
             "ASCII without spaces (example: 34ABC123). Valid serial layouts after the "
             "two-digit province code are: 1 letter plus 4-5 digits, 2 letters plus "
-            "3-4 digits, or 3 letters plus 2-3 digits. Return null when no crop has a "
+            "3-4 digits, or 3 letters plus 2-3 digits. Plate letters may only be "
+            "A-P, R-V, Y, or Z (never Q, W, X, or accented Turkish letters). "
+            "Return null when no crop has a "
             "clear, unambiguous, valid plate. candidate_index is the zero-based index "
             "of the crop used; use 0 when only one crop is provided."
         )

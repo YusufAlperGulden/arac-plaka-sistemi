@@ -51,15 +51,34 @@ class OcrApiTests(unittest.TestCase):
 
     def test_plate_normalization_accepts_supported_layouts(self):
         cases = {
+            "01 A 0001": "01A0001",
+            "34 A 1234": "34A1234",
             "34 KM 4969": "34KM4969",
             "06-A-12345": "06A12345",
+            "34 AB 123": "34AB123",
+            "34 AB 1234": "34AB1234",
             "34 ABC 12": "34ABC12",
+            "34 ABC 123": "34ABC123",
+            "81 Z 9999": "81Z9999",
         }
         for raw, expected in cases.items():
             with self.subTest(raw=raw):
                 self.assertEqual(app_module.normalize_turkish_plate(raw), expected)
 
-        for invalid in ("82ABC123", "34ABC1234", "34A123", None):
+        for invalid in (
+            "00A1234",
+            "82ABC123",
+            "34ABC1234",
+            "34A123",
+            "34Q1234",
+            "34AW123",
+            "34ABX123",
+            "34Ş1234",
+            "34Aİ123",
+            "34ABÇ123",
+            "124ABC123",
+            None,
+        ):
             with self.subTest(invalid=invalid):
                 self.assertIsNone(app_module.normalize_turkish_plate(invalid))
 
@@ -68,6 +87,7 @@ class OcrApiTests(unittest.TestCase):
             "35 VEB OO1": "35VEB001",
             "35 VEB 00I": "35VEB001",
             "O6 A 12345": "06A12345",
+            "36A0Q348": "36A00348",
         }
         for raw, expected in cases.items():
             with self.subTest(raw=raw):
@@ -79,7 +99,6 @@ class OcrApiTests(unittest.TestCase):
         for ambiguous_or_invalid in (
             "99 ABC 1234",
             "77G5Z33",
-            "36A0Q348",
             "46C1S05",
         ):
             with self.subTest(ambiguous_or_invalid=ambiguous_or_invalid):

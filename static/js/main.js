@@ -12,8 +12,12 @@ document.addEventListener('DOMContentLoaded', () => {
         mapOverlayToVideoSource,
         buildVerticalScanCrops,
         plateCandidateIoU,
+        plateCandidatesReferToSameRegion,
+        selectTrackedPlateCandidate,
         detectPlateCandidates,
-        mapPlateCandidatesToSource
+        mapPlateCandidatesToSource,
+        orderOcrCropRegions,
+        shouldAcceptOcrConsensus
     } = window.PlateOcrUtils;
 
     // ---- PWA Service Worker Registration ----
@@ -178,19 +182,20 @@ document.addEventListener('DOMContentLoaded', () => {
     let isPlateListReady = false;
     let ocrSessionId = 0;
     const OCR_MIN_CONFIDENCE = 45;
+    const OCR_CONSENSUS_MIN_CONFIDENCE = 28;
     const OCR_STRONG_CONFIDENCE = 82;
     const GEMINI_TIMEOUT_MS = 12000;
     const TESSERACT_STAGE_TIMEOUT_MS = 8000;
     const DETECTION_MAX_WIDTH = 520;
-    const AUTO_SCAN_INTERVAL_MS = 1250;
-    const AUTO_SCAN_STABLE_FRAMES = 3;
-    const AUTO_SCAN_MIN_SCORE = 0.54;
-    const AUTO_SCAN_RETRY_COOLDOWN_MS = 30000;
+    const AUTO_SCAN_INTERVAL_MS = 900;
+    const AUTO_SCAN_STABLE_FRAMES = 2;
+    const AUTO_SCAN_MIN_SCORE = 0.48;
+    const AUTO_SCAN_RETRY_COOLDOWN_MS = 12000;
     let autoScanTimer = null;
     let autoScanPreviousCandidate = null;
     let autoScanStableFrames = 0;
     let autoScanCooldownUntil = 0;
-    let autoScanBlockedCandidate = null;
+    let autoScanBlockedCandidate = [];
     let autoScanMissingFrames = 0;
     let detectionCanvas = null;
     let detectionContext = null;
@@ -372,13 +377,27 @@ document.addEventListener('DOMContentLoaded', () => {
         };
     }
 
-    function captureDetectionFrame(video) {
+    function captureFullVideoFrame(video) {
+        const canvas = document.createElement('canvas');
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        const context = canvas.getContext('2d', { willReadFrequently: true });
+        if (!context) {
+            throw new Error('Plaka tespit görüntüsü hazırlanamadı.');
+        }
+        context.drawImage(video, 0, 0, canvas.width, canvas.height);
+        return canvas;
+    }
+
+    function captureDetectionFrame(source) {
+        const sourceWidth = source.videoWidth || source.width;
+        const sourceHeight = source.videoHeight || source.height;
         const scale = Math.min(
             1,
-            DETECTION_MAX_WIDTH / Math.max(video.videoWidth, video.videoHeight)
+            DETECTION_MAX_WIDTH / Math.max(sourceWidth, sourceHeight)
         );
-        const width = Math.max(1, Math.round(video.videoWidth * scale));
-        const height = Math.max(1, Math.round(video.videoHeight * scale));
+        const width = Math.max(1, Math.round(sourceWidth * scale));
+        const height = Math.max(1, Math.round(sourceHeight * scale));
 
         if (!detectionCanvas) {
             detectionCanvas = document.createElement('canvas');
@@ -395,7 +414,7 @@ document.addEventListener('DOMContentLoaded', () => {
             detectionCanvas.height = height;
         }
 
-        detectionContext.drawImage(video, 0, 0, width, height);
+        detectionContext.drawImage(source, 0, 0, width, height);
         const imageData = detectionContext.getImageData(0, 0, width, height);
         const candidates = detectPlateCandidates(
             imageData,
@@ -514,15 +533,43 @@ document.addEventListener('DOMContentLoaded', () => {
         return selected;
     }
 
-    function buildOcrCropRegions(video, preferredDetection = null) {
-        const detection = preferredDetection || captureDetectionFrame(video);
+    function buildOcrCropRegions(
+        video,
+        preferredDetection = null,
+        { automatic = false, source = video } = {}
+    ) {
+        const capturedDetection = captureDetectionFrame(source);
+        const previousCandidate = (
+            preferredDetection?.preferredCandidate
+            || preferredDetection?.candidates?.[0]
+            || null
+        );
+        const trackedCandidate = selectTrackedPlateCandidate(
+            capturedDetection.candidates,
+            previousCandidate
+        );
+        const orderedCandidates = trackedCandidate
+            ? [
+                trackedCandidate,
+                ...capturedDetection.candidates.filter(
+                    candidate => candidate !== trackedCandidate
+                ),
+            ]
+            : capturedDetection.candidates;
+        const detection = {
+            ...capturedDetection,
+            candidates: orderedCandidates,
+            preferredCandidate: trackedCandidate,
+        };
+        const sourceWidth = source.videoWidth || source.width;
+        const sourceHeight = source.videoHeight || source.height;
         const automaticCrops = mapPlateCandidatesToSource(
             detection.candidates,
             {
                 detectionWidth: detection.width,
                 detectionHeight: detection.height,
-                sourceWidth: video.videoWidth,
-                sourceHeight: video.videoHeight,
+                sourceWidth,
+                sourceHeight,
             }
         );
 
@@ -536,11 +583,12 @@ document.addEventListener('DOMContentLoaded', () => {
             objectFit: computedStyle.objectFit,
             objectPosition: computedStyle.objectPosition
         });
-        const fallbackCrops = buildVerticalScanCrops(fallbackCrop, video.videoHeight);
-        const sourceCrops = deduplicateCrops([
-            ...automaticCrops,
-            ...fallbackCrops,
-        ]);
+        const fallbackCrops = buildVerticalScanCrops(fallbackCrop, sourceHeight);
+        const sourceCrops = orderOcrCropRegions(
+            automaticCrops,
+            fallbackCrops,
+            { automatic }
+        );
 
         return { detection, sourceCrops };
     }
@@ -825,8 +873,8 @@ document.addEventListener('DOMContentLoaded', () => {
             { name: 'Original', apply: () => {} },
         ];
 
-        for (const stage of stages) {
-            for (let cropIndex = 0; cropIndex < cropCaptures.length; cropIndex += 1) {
+        for (let cropIndex = 0; cropIndex < cropCaptures.length; cropIndex += 1) {
+            for (const stage of stages) {
                 if (sessionId !== ocrSessionId) {
                     return null;
                 }
@@ -845,12 +893,36 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 const recognizedText = result.data.text || '';
                 const confidence = Number(result.data.confidence) || 0;
-                const registeredMatch = matchRegisteredPlate(recognizedText, registeredPlates);
+                const normalizedRecognizedText = String(recognizedText).toUpperCase();
+                const recognizedCompact = /[ÇĞİÖŞÜ]/.test(normalizedRecognizedText)
+                    ? ''
+                    : normalizedRecognizedText.replace(/[^A-Z0-9]/g, '');
+                const eligibleRegisteredPlates = registeredPlates.filter(plate => (
+                    parseTurkishPlate(
+                        String(plate),
+                        { allowOcrCorrections: false }
+                    )?.normalized.length === recognizedCompact.length
+                ));
+                const registeredMatch = (
+                    recognizedCompact.length === 7
+                    || recognizedCompact.length === 8
+                )
+                    ? matchRegisteredPlate(
+                        recognizedText,
+                        eligibleRegisteredPlates
+                    )
+                    : null;
                 const parsed = registeredMatch
                     ? parseTurkishPlate(registeredMatch.normalized)
                     : parseTurkishPlate(recognizedText);
 
-                if (parsed && (confidence >= OCR_MIN_CONFIDENCE || registeredMatch)) {
+                if (
+                    parsed
+                    && (
+                        confidence >= OCR_CONSENSUS_MIN_CONFIDENCE
+                        || registeredMatch
+                    )
+                ) {
                     const corrected = Boolean(
                         registeredMatch?.corrected || parsed.ocrCorrected
                     );
@@ -858,6 +930,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         text: parsed.normalized,
                         confidence,
                         corrected,
+                        registered: Boolean(registeredMatch),
                         parts: [
                             parsed.provinceCode.toString().padStart(2, '0'),
                             parsed.letters,
@@ -874,6 +947,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
                     const vote = votes.get(candidate.text) || {
                         count: 0,
+                        totalConfidence: 0,
+                        corrected: false,
+                        registered: false,
                         best: candidate,
                         variants: new Set(),
                     };
@@ -881,7 +957,10 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (!vote.variants.has(variantKey)) {
                         vote.variants.add(variantKey);
                         vote.count += 1;
+                        vote.totalConfidence += confidence;
                     }
+                    vote.corrected = vote.corrected || corrected;
+                    vote.registered = vote.registered || candidate.registered;
                     if (candidate.confidence > vote.best.confidence) {
                         vote.best = candidate;
                     }
@@ -896,7 +975,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     ) {
                         return candidate;
                     }
-                    if (vote.count >= 2 && vote.best.confidence >= OCR_MIN_CONFIDENCE) {
+                    if (shouldAcceptOcrConsensus(vote)) {
                         return {
                             ...vote.best,
                             consensus: vote.count,
@@ -919,9 +998,19 @@ document.addEventListener('DOMContentLoaded', () => {
             );
         });
         const best = candidates[0] || null;
-        return best
-            ? { ...best, consensus: votes.get(best.text)?.count || 1 }
-            : null;
+        if (!best) {
+            return null;
+        }
+
+        const bestVote = votes.get(best.text);
+        if (
+            best.registered
+            || best.confidence >= OCR_MIN_CONFIDENCE
+            || shouldAcceptOcrConsensus(bestVote)
+        ) {
+            return { ...best, consensus: bestVote?.count || 1 };
+        }
+        return null;
     }
 
     function showOcrResult(bestMatch, source) {
@@ -1026,11 +1115,15 @@ document.addEventListener('DOMContentLoaded', () => {
         let succeeded = false;
 
         try {
+            const frozenFrame = captureFullVideoFrame(video);
             const { detection, sourceCrops } = buildOcrCropRegions(
                 video,
-                preferredDetection
+                preferredDetection,
+                { automatic, source: frozenFrame }
             );
-            const cropCaptures = sourceCrops.map(crop => captureVideoCrop(video, crop));
+            const cropCaptures = sourceCrops.map(
+                crop => captureVideoCrop(frozenFrame, crop)
+            );
             const primaryCapture = cropCaptures[0];
             if (!primaryCapture) {
                 throw new Error('OCR için uygun plaka kırpımı oluşturulamadı.');
@@ -1137,12 +1230,52 @@ document.addEventListener('DOMContentLoaded', () => {
         autoScanTimer = setTimeout(runAutoScanFrame, delay);
     }
 
+    function pruneAutoScanBlockedCandidates(now = Date.now()) {
+        autoScanBlockedCandidate = autoScanBlockedCandidate.filter(
+            entry => entry.until > now
+        );
+        autoScanCooldownUntil = autoScanBlockedCandidate.reduce(
+            (maximum, entry) => Math.max(maximum, entry.until),
+            0
+        );
+    }
+
+    function isAutoScanCandidateBlocked(candidate, now = Date.now()) {
+        pruneAutoScanBlockedCandidates(now);
+        return autoScanBlockedCandidate.some(entry => (
+            plateCandidatesReferToSameRegion(entry.candidate, candidate)
+        ));
+    }
+
+    function blockAutoScanCandidate(candidate) {
+        if (!candidate) {
+            return;
+        }
+
+        const until = Date.now() + AUTO_SCAN_RETRY_COOLDOWN_MS;
+        pruneAutoScanBlockedCandidates();
+        const existing = autoScanBlockedCandidate.find(entry => (
+            plateCandidatesReferToSameRegion(entry.candidate, candidate)
+        ));
+        if (existing) {
+            existing.candidate = candidate;
+            existing.until = until;
+        } else {
+            autoScanBlockedCandidate.push({ candidate, until });
+        }
+        autoScanCooldownUntil = autoScanBlockedCandidate.reduce(
+            (maximum, entry) => Math.max(maximum, entry.until),
+            0
+        );
+    }
+
     function stopAutoScan() {
         clearTimeout(autoScanTimer);
         autoScanTimer = null;
         autoScanPreviousCandidate = null;
         autoScanStableFrames = 0;
-        autoScanBlockedCandidate = null;
+        autoScanBlockedCandidate = [];
+        autoScanCooldownUntil = 0;
         autoScanMissingFrames = 0;
         hideDetectionOverlay();
     }
@@ -1176,15 +1309,20 @@ document.addEventListener('DOMContentLoaded', () => {
 
         try {
             const detection = captureDetectionFrame(video);
-            const candidate = detection.candidates[0] || null;
-            if (!candidate || candidate.score < AUTO_SCAN_MIN_SCORE) {
+            const now = Date.now();
+            pruneAutoScanBlockedCandidates(now);
+
+            const credibleCandidates = detection.candidates.filter(candidate => (
+                Number(candidate.ocrScore ?? candidate.score) >= AUTO_SCAN_MIN_SCORE
+            ));
+            if (!credibleCandidates.length) {
                 autoScanMissingFrames += 1;
                 if (autoScanMissingFrames >= 2) {
-                    autoScanBlockedCandidate = null;
-                    autoScanCooldownUntil = 0;
+                    autoScanPreviousCandidate = null;
+                    autoScanStableFrames = 0;
+                } else {
+                    autoScanStableFrames = Math.max(0, autoScanStableFrames - 1);
                 }
-                autoScanPreviousCandidate = null;
-                autoScanStableFrames = 0;
                 hideDetectionOverlay();
                 setAutoScanStatus('Plaka aranıyor…', 'searching');
                 scheduleAutoScan();
@@ -1192,17 +1330,33 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             autoScanMissingFrames = 0;
 
-            if (
-                autoScanBlockedCandidate
-                && plateCandidateIoU(autoScanBlockedCandidate, candidate) < 0.35
-            ) {
-                autoScanBlockedCandidate = null;
-                autoScanCooldownUntil = 0;
+            const availableCandidates = credibleCandidates.filter(
+                candidate => !isAutoScanCandidateBlocked(candidate, now)
+            );
+            if (!availableCandidates.length) {
+                const blockedCandidate = selectTrackedPlateCandidate(
+                    credibleCandidates,
+                    autoScanBlockedCandidate[0]?.candidate || null
+                );
+                showDetectionOverlay(video, detection, blockedCandidate, false);
+                setAutoScanStatus(
+                    'Netliği düzeltin veya “Şimdi Tara” düğmesine dokunun.',
+                    'found'
+                );
+                scheduleAutoScan();
+                return;
             }
 
+            const candidate = selectTrackedPlateCandidate(
+                availableCandidates,
+                autoScanPreviousCandidate
+            );
             const stableWithPrevious = (
                 autoScanPreviousCandidate
-                && plateCandidateIoU(autoScanPreviousCandidate, candidate) >= 0.52
+                && plateCandidatesReferToSameRegion(
+                    autoScanPreviousCandidate,
+                    candidate
+                )
             );
             autoScanStableFrames = stableWithPrevious
                 ? autoScanStableFrames + 1
@@ -1211,41 +1365,28 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const stable = autoScanStableFrames >= AUTO_SCAN_STABLE_FRAMES;
             showDetectionOverlay(video, detection, candidate, stable);
-            const waitingAfterFailure = (
+            setAutoScanStatus(
                 stable
-                && Date.now() < autoScanCooldownUntil
-                && (
-                    !autoScanBlockedCandidate
-                    || plateCandidateIoU(autoScanBlockedCandidate, candidate) >= 0.35
-                )
+                    ? 'Plaka bulundu; otomatik okunuyor…'
+                    : 'Plaka bulundu; kısa süre sabit tutun.',
+                stable ? 'success' : 'found'
             );
-            if (waitingAfterFailure) {
-                setAutoScanStatus(
-                    'Netliği düzeltin veya “Şimdi Tara” düğmesine dokunun.',
-                    'found'
-                );
-            } else {
-                setAutoScanStatus(
-                    stable
-                        ? 'Plaka bulundu; otomatik okunuyor…'
-                        : 'Plaka bulundu; kısa süre sabit tutun.',
-                    stable ? 'success' : 'found'
-                );
-            }
 
-            if (stable && Date.now() >= autoScanCooldownUntil) {
+            if (stable) {
                 const succeeded = await performPlateOcr({
-                    preferredDetection: detection,
+                    preferredDetection: {
+                        ...detection,
+                        preferredCandidate: candidate,
+                    },
                     automatic: true,
                 });
                 if (succeeded) {
                     return;
                 }
-                // Bekleme süresini uzun OCR işlemi bittikten sonra başlat. Aynı
-                // sabit yanlış aday, kullanıcı kadrajı değiştirmeden tekrar
-                // tekrar sunucuya/Tesseract'a gönderilmez.
-                autoScanBlockedCandidate = candidate;
-                autoScanCooldownUntil = Number.POSITIVE_INFINITY;
+                // Bekleme süresini uzun OCR işlemi bittikten sonra başlat.
+                // Aynı aday kısa süre bekletilir; başka bir bölgedeki adaylar
+                // ve manuel tarama bu bekleme süresinden etkilenmez.
+                blockAutoScanCandidate(candidate);
                 autoScanPreviousCandidate = null;
                 autoScanStableFrames = 0;
             }
@@ -1262,7 +1403,9 @@ document.addEventListener('DOMContentLoaded', () => {
         triggerOcrBtn.addEventListener('click', async () => {
             const succeeded = await performPlateOcr();
             if (!succeeded) {
-                autoScanCooldownUntil = Date.now() + AUTO_SCAN_RETRY_COOLDOWN_MS;
+                blockAutoScanCandidate(autoScanPreviousCandidate);
+                autoScanPreviousCandidate = null;
+                autoScanStableFrames = 0;
             }
         });
     }

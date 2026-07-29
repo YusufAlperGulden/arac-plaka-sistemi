@@ -35,27 +35,34 @@
         6: 'G',
         8: 'B',
     };
+    const PLATE_ALLOWED_LETTERS = 'ABCDEFGHIJKLMNOPRSTUVYZ';
+    const PLATE_ALLOWED_LETTER_SET = new Set(PLATE_ALLOWED_LETTERS);
+    const PLATE_DIGIT_COUNTS_BY_LETTER_COUNT = Object.freeze({
+        1: Object.freeze([4, 5]),
+        2: Object.freeze([3, 4]),
+        3: Object.freeze([2, 3]),
+    });
 
     function normalizeCharacters(value) {
-        return String(value || '')
-            .toUpperCase()
-            .replace(/İ/g, 'I')
-            .replace(/Ş/g, 'S');
+        return String(value || '').toUpperCase();
     }
 
     function buildPlate(provinceText, letters, digits) {
         const provinceCode = Number(provinceText);
-        const validDigitCounts = {
-            1: new Set([4, 5]),
-            2: new Set([3, 4]),
-            3: new Set([2, 3]),
-        };
 
-        if (!Number.isInteger(provinceCode) || provinceCode < 1 || provinceCode > 81) {
+        if (
+            !/^\d{2}$/.test(provinceText)
+            || !Number.isInteger(provinceCode)
+            || provinceCode < 1
+            || provinceCode > 81
+        ) {
             return null;
         }
 
-        if (!validDigitCounts[letters.length]?.has(digits.length)) {
+        if (
+            !Array.from(letters).every(letter => PLATE_ALLOWED_LETTER_SET.has(letter))
+            || !PLATE_DIGIT_COUNTS_BY_LETTER_COUNT[letters.length]?.includes(digits.length)
+        ) {
             return null;
         }
 
@@ -81,7 +88,7 @@
                 } else {
                     return null;
                 }
-            } else if (/[A-Z]/.test(character)) {
+            } else if (PLATE_ALLOWED_LETTER_SET.has(character)) {
                 converted += character;
             } else if (OCR_TO_LETTER[character]) {
                 converted += OCR_TO_LETTER[character];
@@ -157,7 +164,7 @@
         }
 
         const source = normalizeCharacters(value);
-        const separatedPattern = /(?:^|[^A-Z0-9])(\d{2})[\s\-_.]*([A-Z]{1,3})[\s\-_.]*(\d{2,5})(?=$|[^A-Z0-9])/g;
+        const separatedPattern = /(?:^|[^A-Z0-9])(\d{2})[\s\-_.]*([A-PR-VYZ]{1,3})[\s\-_.]*(\d{2,5})(?=$|[^A-Z0-9])/g;
         let match;
 
         while ((match = separatedPattern.exec(source)) !== null) {
@@ -167,8 +174,10 @@
             }
         }
 
-        const compact = source.replace(/[^A-Z0-9]/g, '');
-        const compactMatch = /^(\d{2})([A-Z]{1,3})(\d{2,5})$/.exec(compact);
+        const compact = /[ÇĞİÖŞÜ]/.test(source)
+            ? ''
+            : source.replace(/[^A-Z0-9]/g, '');
+        const compactMatch = /^(\d{2})([A-PR-VYZ]{1,3})(\d{2,5})$/.exec(compact);
         if (compactMatch) {
             return buildPlate(compactMatch[1], compactMatch[2], compactMatch[3]);
         }
@@ -177,31 +186,6 @@
             const corrected = parsePlateWithOcrCorrections(compact);
             if (corrected) {
                 return corrected;
-            }
-        }
-
-        // Plakanın sol kenarı veya mavi TR bandı bazen tek bir harf/rakam
-        // olarak okunur (örn. H02ABG585 veya 102ABG585). Sadece en fazla iki
-        // karakterlik bir ön eki atarak geçerli bir plaka son eki arıyoruz;
-        // böylece 34ABC1234 gibi gerçekten geçersiz uzun plakaları kabul etmeyiz.
-        for (let prefixLength = 1; prefixLength <= Math.min(2, compact.length - 1); prefixLength += 1) {
-            const suffixMatch = /^(\d{2})([A-Z]{1,3})(\d{2,5})$/.exec(compact.slice(prefixLength));
-            if (!suffixMatch) {
-                continue;
-            }
-
-            const parsed = buildPlate(suffixMatch[1], suffixMatch[2], suffixMatch[3]);
-            if (parsed) {
-                return parsed;
-            }
-        }
-
-        if (allowOcrCorrections) {
-            for (let prefixLength = 1; prefixLength <= Math.min(2, compact.length - 1); prefixLength += 1) {
-                const correctedSuffix = parsePlateWithOcrCorrections(compact.slice(prefixLength));
-                if (correctedSuffix) {
-                    return correctedSuffix;
-                }
             }
         }
 
@@ -273,9 +257,15 @@
             }
         }
 
-        const compact = normalizeCharacters(value).replace(/[^A-Z0-9]/g, '');
+        const normalizedValue = normalizeCharacters(value);
+        const compact = /[ÇĞİÖŞÜ]/.test(normalizedValue)
+            ? ''
+            : normalizedValue.replace(/[^A-Z0-9]/g, '');
         for (const target of targets) {
             const length = target.normalized.length;
+            if (compact.length !== length) {
+                continue;
+            }
             for (let start = 0; start <= compact.length - length; start += 1) {
                 const observed = compact.slice(start, start + length);
                 if (isConfusionOnlyMatch(observed, target.normalized)) {
@@ -458,6 +448,96 @@
 
         const unionArea = rectangleArea(left) + rectangleArea(right) - intersectionArea;
         return unionArea > 0 ? intersectionArea / unionArea : 0;
+    }
+
+    function plateCandidatesReferToSameRegion(left, right) {
+        if (!left || !right) {
+            return false;
+        }
+
+        const intersectionArea = rectangleArea(rectangleIntersection(left, right));
+        if (intersectionArea <= 0) {
+            return false;
+        }
+
+        const minimumArea = Math.max(
+            1,
+            Math.min(rectangleArea(left), rectangleArea(right))
+        );
+        const widthSimilarity = (
+            Math.min(left.w, right.w) / Math.max(1, Math.max(left.w, right.w))
+        );
+        const heightSimilarity = (
+            Math.min(left.h, right.h) / Math.max(1, Math.max(left.h, right.h))
+        );
+        const scaleSimilarity = Math.min(widthSimilarity, heightSimilarity);
+        const centerDistance = Math.hypot(
+            (left.x + left.w / 2) - (right.x + right.w / 2),
+            (left.y + left.h / 2) - (right.y + right.h / 2)
+        );
+        const normalizedCenterDistance = centerDistance / Math.max(
+            1,
+            Math.max(left.w, right.w)
+        );
+
+        return (
+            plateCandidateIoU(left, right) >= 0.30
+            || (
+                intersectionArea / minimumArea >= 0.72
+                && scaleSimilarity >= 0.45
+            )
+            || (
+                normalizedCenterDistance <= 0.24
+                && widthSimilarity >= 0.52
+                && heightSimilarity >= 0.45
+            )
+        );
+    }
+
+    function selectTrackedPlateCandidate(candidates, previousCandidate = null) {
+        const available = Array.from(candidates || []).filter(candidate => (
+            candidate
+            && Number.isFinite(candidate.x)
+            && Number.isFinite(candidate.y)
+            && Number.isFinite(candidate.w)
+            && Number.isFinite(candidate.h)
+            && candidate.w > 0
+            && candidate.h > 0
+        ));
+        if (!available.length || !previousCandidate) {
+            return available[0] || null;
+        }
+
+        const matches = available.filter(
+            candidate => plateCandidatesReferToSameRegion(previousCandidate, candidate)
+        );
+        if (!matches.length) {
+            return available[0];
+        }
+
+        matches.sort((left, right) => {
+            const continuityScore = candidate => {
+                const widthSimilarity = (
+                    Math.min(candidate.w, previousCandidate.w)
+                    / Math.max(1, Math.max(candidate.w, previousCandidate.w))
+                );
+                const heightSimilarity = (
+                    Math.min(candidate.h, previousCandidate.h)
+                    / Math.max(1, Math.max(candidate.h, previousCandidate.h))
+                );
+                const detectionScore = Number(
+                    candidate.ocrScore ?? candidate.score
+                ) || 0;
+                return (
+                    plateCandidateIoU(previousCandidate, candidate) * 0.45
+                    + Math.min(widthSimilarity, heightSimilarity) * 0.25
+                    + detectionScore * 0.30
+                );
+            };
+            return continuityScore(right) - continuityScore(left);
+        });
+
+        return matches[0];
     }
 
     function createPlateDetectionIntegrals(imageData, width, height) {
@@ -737,6 +817,48 @@
         };
     }
 
+    function scorePlateCandidateForOcr(candidate, frameWidth) {
+        if (
+            !candidate
+            || !Number.isFinite(frameWidth)
+            || frameWidth <= 0
+            || !Number.isFinite(candidate.w)
+            || !Number.isFinite(candidate.h)
+            || candidate.w <= 0
+            || candidate.h <= 0
+        ) {
+            return 0;
+        }
+
+        const baseScore = clamp(Number(candidate.score) || 0, 0, 1);
+        const widthRatio = candidate.w / frameWidth;
+        const sizeScore = clamp((widthRatio - 0.12) / 0.48, 0, 1);
+        const aspectRatio = candidate.w / candidate.h;
+        const aspectScore = Math.exp(
+            -Math.abs(Math.log(aspectRatio / 4.45)) * 1.35
+        );
+        const leftMarginRatio = candidate.x / frameWidth;
+        const rightMarginRatio = (
+            frameWidth - candidate.x - candidate.w
+        ) / frameWidth;
+        const clippedEdgePenalty = (
+            leftMarginRatio < 0.012 || rightMarginRatio < 0.012
+        ) ? 0.035 : 0;
+
+        // A few high-contrast characters can have a higher raw detector score
+        // than the enclosing plate. OCR needs the complete line, so candidate
+        // width and plate-like aspect ratio receive an explicit ranking weight.
+        return clamp(
+            baseScore * 0.68
+            + sizeScore * 0.24
+            + aspectScore * 0.08
+            + (candidate.merged ? 0.01 : 0)
+            - clippedEdgePenalty,
+            0,
+            1
+        );
+    }
+
     function detectPlateCandidates(
         imageData,
         width,
@@ -811,7 +933,9 @@
         }
 
         scored.sort((left, right) => right.score - left.score);
-        const rerankLimit = Math.max(500, maxCandidates * 120);
+        // Keep enough raw windows for a wider, complete plate to survive even
+        // when individual character fragments have sharper local contrast.
+        const rerankLimit = Math.max(1500, maxCandidates * 120);
         const enrichCandidate = candidate => {
             const pattern = scoreVerticalEdgePattern(integrals, candidate);
             const sizeScore = clamp((candidate.w / width - 0.10) / 0.28, 0, 1);
@@ -825,11 +949,19 @@
             };
         };
         const reranked = scored.slice(0, rerankLimit).map(enrichCandidate);
+        reranked.forEach(candidate => {
+            candidate.ocrScore = scorePlateCandidateForOcr(candidate, width);
+        });
 
         // A narrow window can score highly when it contains only a few clear
         // characters. Neighbouring text windows on the same horizontal line are
         // merged so the province code and the trailing digits stay in one crop.
-        const mergeBase = reranked.slice(0, 80);
+        const mergeBase = [...reranked]
+            .sort((left, right) => (
+                right.ocrScore - left.ocrScore
+                || right.score - left.score
+            ))
+            .slice(0, 160);
         const mergedKeys = new Set();
         for (let leftIndex = 0; leftIndex < mergeBase.length; leftIndex += 1) {
             for (let rightIndex = leftIndex + 1; rightIndex < mergeBase.length; rightIndex += 1) {
@@ -870,7 +1002,7 @@
                 );
                 if (
                     aspectRatio < 2.4
-                    || aspectRatio > 7.2
+                    || aspectRatio > 9.5
                     || rectangle.w > width * 0.88
                     || uniqueHorizontalContribution < minimumWidth * 0.22
                 ) {
@@ -894,7 +1026,7 @@
                 }
                 const merged = enrichCandidate(rescored);
                 const neighbourAverage = (left.score + right.score) / 2;
-                if (merged.score >= neighbourAverage - 0.04) {
+                if (merged.score >= neighbourAverage - 0.12) {
                     merged.score = clamp(
                         Math.max(merged.score, neighbourAverage + 0.025),
                         0,
@@ -906,7 +1038,13 @@
             }
         }
 
-        reranked.sort((left, right) => right.score - left.score);
+        reranked.forEach(candidate => {
+            candidate.ocrScore = scorePlateCandidateForOcr(candidate, width);
+        });
+        reranked.sort((left, right) => (
+            right.ocrScore - left.ocrScore
+            || right.score - left.score
+        ));
         const selected = [];
 
         for (const candidate of reranked) {
@@ -931,7 +1069,99 @@
             }
         }
 
-        return selected;
+        // A long plate can still be represented by two overlapping partial
+        // text-line candidates after the first NMS pass. Combine those final
+        // neighbours once more so both the province code and trailing digits
+        // reach OCR in a single crop.
+        const combinedCandidates = [];
+        for (let leftIndex = 0; leftIndex < selected.length; leftIndex += 1) {
+            for (let rightIndex = leftIndex + 1; rightIndex < selected.length; rightIndex += 1) {
+                const left = selected[leftIndex];
+                const right = selected[rightIndex];
+                const minimumWidth = Math.min(left.w, right.w);
+                const minimumHeight = Math.min(left.h, right.h);
+                const verticalOverlap = Math.max(
+                    0,
+                    Math.min(left.y + left.h, right.y + right.h)
+                    - Math.max(left.y, right.y)
+                );
+                const horizontalDistance = Math.abs(
+                    (left.x + left.w / 2) - (right.x + right.w / 2)
+                );
+                const x = Math.min(left.x, right.x);
+                const y = Math.min(left.y, right.y);
+                const rightEdge = Math.max(left.x + left.w, right.x + right.w);
+                const bottomEdge = Math.max(left.y + left.h, right.y + right.h);
+                const rectangle = {
+                    x,
+                    y,
+                    w: rightEdge - x,
+                    h: bottomEdge - y,
+                };
+                const uniqueHorizontalContribution = (
+                    rectangle.w - Math.max(left.w, right.w)
+                );
+                const aspectRatio = rectangle.w / rectangle.h;
+
+                if (
+                    verticalOverlap / Math.max(1, minimumHeight) < 0.58
+                    || horizontalDistance < minimumWidth * 0.25
+                    || horizontalDistance > minimumWidth * 1.10
+                    || uniqueHorizontalContribution < minimumWidth * 0.18
+                    || rectangle.w < width * 0.42
+                    || rectangle.w > width * 0.92
+                    || aspectRatio < 2.4
+                    || aspectRatio > 9.5
+                ) {
+                    continue;
+                }
+
+                const rescored = scorePlateWindow(integrals, rectangle);
+                if (!rescored) {
+                    continue;
+                }
+                const combined = enrichCandidate(rescored);
+                const neighbourAverage = (left.score + right.score) / 2;
+                combined.score = clamp(
+                    Math.max(combined.score, neighbourAverage + 0.015),
+                    0,
+                    1
+                );
+                combined.merged = true;
+                combined.ocrScore = scorePlateCandidateForOcr(combined, width);
+                combinedCandidates.push(combined);
+            }
+        }
+
+        const finalPool = [...combinedCandidates, ...selected].sort(
+            (left, right) => (
+                right.ocrScore - left.ocrScore
+                || right.score - left.score
+            )
+        );
+        const finalSelected = [];
+        for (const candidate of finalPool) {
+            const overlapsExisting = finalSelected.some(existing => {
+                const intersection = rectangleIntersection(candidate, existing);
+                const intersectionArea = rectangleArea(intersection);
+                const containment = intersectionArea / Math.max(
+                    1,
+                    Math.min(rectangleArea(candidate), rectangleArea(existing))
+                );
+                return (
+                    plateCandidateIoU(candidate, existing) >= 0.42
+                    || containment >= 0.78
+                );
+            });
+            if (!overlapsExisting) {
+                finalSelected.push(candidate);
+            }
+            if (finalSelected.length >= maxCandidates) {
+                break;
+            }
+        }
+
+        return finalSelected;
     }
 
     function mapPlateCandidatesToSource(
@@ -941,8 +1171,8 @@
             detectionHeight,
             sourceWidth,
             sourceHeight,
-            horizontalPadding = 0.12,
-            verticalPadding = 0.28,
+            horizontalPadding = 0.08,
+            verticalPadding = 0.18,
         }
     ) {
         if (
@@ -966,8 +1196,12 @@
             const rawY = candidate.y * scaleY;
             const rawWidth = candidate.w * scaleX;
             const rawHeight = candidate.h * scaleY;
-            const paddingX = rawWidth * horizontalPadding;
-            const paddingY = rawHeight * verticalPadding;
+            const paddingX = rawWidth * (
+                candidate.merged ? 0.04 : horizontalPadding
+            );
+            const paddingY = rawHeight * (
+                candidate.merged ? 0.30 : verticalPadding
+            );
             const x = clamp(rawX - paddingX, 0, sourceWidth);
             const y = clamp(rawY - paddingY, 0, sourceHeight);
             const right = clamp(rawX + rawWidth + paddingX, 0, sourceWidth);
@@ -978,20 +1212,89 @@
                 y,
                 w: right - x,
                 h: bottom - y,
-                detectionScore: Number(candidate.score) || 0,
+                detectionScore: Number(candidate.ocrScore ?? candidate.score) || 0,
                 automatic: true,
             };
         }).filter(crop => crop.w > 0 && crop.h > 0);
     }
 
+    function orderOcrCropRegions(
+        automaticCrops,
+        fallbackCrops,
+        { automatic = false, maximumCount = 6 } = {}
+    ) {
+        const detected = Array.from(automaticCrops || []);
+        const manual = Array.from(fallbackCrops || []);
+        const ordered = automatic
+            ? [
+                detected[0],
+                detected[1],
+                manual[0],
+                ...detected.slice(2),
+                ...manual.slice(1),
+            ]
+            : [
+                manual[0],
+                detected[0],
+                manual[1],
+                detected[1],
+                manual[2],
+                ...detected.slice(2),
+                ...manual.slice(3),
+            ];
+        const selected = [];
+
+        for (const crop of ordered) {
+            if (
+                !crop
+                || !Number.isFinite(crop.w)
+                || !Number.isFinite(crop.h)
+                || crop.w <= 0
+                || crop.h <= 0
+                || selected.some(existing => plateCandidateIoU(existing, crop) >= 0.76)
+            ) {
+                continue;
+            }
+            selected.push(crop);
+            if (selected.length >= maximumCount) {
+                break;
+            }
+        }
+
+        return selected;
+    }
+
+    function shouldAcceptOcrConsensus({
+        count = 0,
+        totalConfidence = 0,
+        corrected = false,
+        registered = false,
+    } = {}) {
+        if (registered && count >= 1) {
+            return true;
+        }
+
+        const averageConfidence = count > 0 ? totalConfidence / count : 0;
+        return corrected
+            ? count >= 3 && averageConfidence >= 28
+            : count >= 2 && averageConfidence >= 30;
+    }
+
     return {
+        PLATE_ALLOWED_LETTERS,
+        PLATE_DIGIT_COUNTS_BY_LETTER_COUNT,
         parseTurkishPlate,
         resolvePlateForForm,
         matchRegisteredPlate,
         mapOverlayToVideoSource,
         buildVerticalScanCrops,
         plateCandidateIoU,
+        plateCandidatesReferToSameRegion,
+        selectTrackedPlateCandidate,
+        scorePlateCandidateForOcr,
         detectPlateCandidates,
         mapPlateCandidatesToSource,
+        orderOcrCropRegions,
+        shouldAcceptOcrConsensus,
     };
 }));

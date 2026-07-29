@@ -1,13 +1,20 @@
 const assert = require('node:assert/strict');
 const {
+    PLATE_ALLOWED_LETTERS,
+    PLATE_DIGIT_COUNTS_BY_LETTER_COUNT,
     parseTurkishPlate,
     resolvePlateForForm,
     matchRegisteredPlate,
     mapOverlayToVideoSource,
     buildVerticalScanCrops,
     plateCandidateIoU,
+    plateCandidatesReferToSameRegion,
+    selectTrackedPlateCandidate,
+    scorePlateCandidateForOcr,
     detectPlateCandidates,
     mapPlateCandidatesToSource,
+    orderOcrCropRegions,
+    shouldAcceptOcrConsensus,
 } = require('../static/js/ocr-utils.js');
 
 function assertRect(actual, expected, tolerance = 1) {
@@ -100,15 +107,20 @@ assert.throws(
 );
 
 const validPlates = new Map([
+    ['01 A 0001', '01A0001'],
+    ['34 A 1234', '34A1234'],
     ['34 KM 4969', '34KM4969'],
     ['06-A-12345', '06A12345'],
+    ['34 AB 123', '34AB123'],
+    ['34 AB 1234', '34AB1234'],
     ['34 ABC 12', '34ABC12'],
+    ['34 ABC 123', '34ABC123'],
+    ['81 Z 9999', '81Z9999'],
     ['Plaka: 34 EZS 794', '34EZS794'],
-    ['H02ABG585', '02ABG585'],
-    ['102 ABG585', '02ABG585'],
     ['35 VEB OO1', '35VEB001'],
     ['35 VEB 00I', '35VEB001'],
     ['O6 A 12345', '06A12345'],
+    ['36A0Q348', '36A00348'],
 ]);
 
 for (const [input, expected] of validPlates) {
@@ -116,17 +128,33 @@ for (const [input, expected] of validPlates) {
 }
 
 for (const invalid of [
+    '00A1234',
     '82ABC123',
     '34ABC1234',
     '34A123',
     '77G5Z33',
-    '36A0Q348',
     '46C1S05',
+    '34Q1234',
+    '34AW123',
+    '34ABX123',
+    '34Ş1234',
+    '34Aİ123',
+    '34ABÇ123',
+    'H02ABG585',
+    '102 ABG585',
+    '124ABC123',
     '',
     null,
 ]) {
     assert.equal(parseTurkishPlate(invalid), null);
 }
+
+assert.equal(PLATE_ALLOWED_LETTERS, 'ABCDEFGHIJKLMNOPRSTUVYZ');
+assert.deepEqual(PLATE_DIGIT_COUNTS_BY_LETTER_COUNT, {
+    1: [4, 5],
+    2: [3, 4],
+    3: [2, 3],
+});
 
 assert.deepEqual(
     matchRegisteredPlate('34 E2S 794', ['34EZS794', '34KM4969']),
@@ -137,6 +165,10 @@ assert.deepEqual(
     { normalized: '34KM4969', corrected: true }
 );
 assert.equal(matchRegisteredPlate('34ABC123', ['34EZS794', '34KM4969']), null);
+assert.equal(
+    matchRegisteredPlate('A34KM49G9B', ['34EZS794', '34KM4969']),
+    null
+);
 
 assert.deepEqual(
     resolvePlateForForm('02 ABG 585', ['34EZS794', '34KM4969']),
@@ -228,8 +260,8 @@ assert.ok(
     `top detector candidate should overlap the plate: ${JSON.stringify(detectedCandidates[0])}`
 );
 assert.ok(
-    detectedCandidates[0].score >= 0.54,
-    `top detector candidate should trigger automatic OCR: ${detectedCandidates[0].score}`
+    detectedCandidates[0].ocrScore >= 0.48,
+    `top detector candidate should trigger automatic OCR: ${detectedCandidates[0].ocrScore}`
 );
 
 const edgePlate = { x: 383, y: 297, w: 247, h: 52 };
@@ -261,5 +293,87 @@ for (let index = 3; index < emptyFrame.data.length; index += 4) {
     emptyFrame.data[index] = 255;
 }
 assert.deepEqual(detectPlateCandidates(emptyFrame, 320, 180), []);
+
+const fullPlateCandidate = { x: 104, y: 161, w: 416, h: 97, score: 0.52364 };
+const characterFragment = { x: 126, y: 200, w: 83, h: 19, score: 0.70878 };
+assert.ok(
+    scorePlateCandidateForOcr(fullPlateCandidate, 520)
+        > scorePlateCandidateForOcr(characterFragment, 520),
+    'the complete plate must outrank a sharper contained character fragment'
+);
+
+const previousCandidate = { x: 100, y: 100, w: 220, h: 48, ocrScore: 0.62 };
+const jitteredCandidate = { x: 165, y: 102, w: 220, h: 48, ocrScore: 0.61 };
+const unrelatedCandidate = { x: 20, y: 20, w: 120, h: 26, ocrScore: 0.75 };
+assert.ok(
+    plateCandidateIoU(previousCandidate, jitteredCandidate) < 0.52,
+    'fixture must fail the former strict frame-to-frame threshold'
+);
+assert.equal(
+    plateCandidatesReferToSameRegion(previousCandidate, jitteredCandidate),
+    true
+);
+assert.equal(
+    selectTrackedPlateCandidate(
+        [unrelatedCandidate, jitteredCandidate],
+        previousCandidate
+    ),
+    jitteredCandidate
+);
+
+const automaticCrops = [
+    { id: 'auto-1', x: 10, y: 10, w: 100, h: 20 },
+    { id: 'auto-2', x: 130, y: 10, w: 100, h: 20 },
+    { id: 'auto-3', x: 250, y: 10, w: 100, h: 20 },
+];
+const fallbackCrops = [
+    { id: 'manual-1', x: 10, y: 80, w: 100, h: 20 },
+    { id: 'manual-2', x: 130, y: 80, w: 100, h: 20 },
+];
+assert.deepEqual(
+    orderOcrCropRegions(automaticCrops, fallbackCrops, { automatic: true })
+        .slice(0, 3)
+        .map(crop => crop.id),
+    ['auto-1', 'auto-2', 'manual-1']
+);
+assert.deepEqual(
+    orderOcrCropRegions(automaticCrops, fallbackCrops, { automatic: false })
+        .slice(0, 3)
+        .map(crop => crop.id),
+    ['manual-1', 'auto-1', 'manual-2']
+);
+
+assert.equal(
+    shouldAcceptOcrConsensus({
+        count: 2,
+        totalConfidence: 65,
+        corrected: false,
+    }),
+    true
+);
+assert.equal(
+    shouldAcceptOcrConsensus({
+        count: 1,
+        totalConfidence: 40,
+        corrected: false,
+    }),
+    false
+);
+assert.equal(
+    shouldAcceptOcrConsensus({
+        count: 2,
+        totalConfidence: 64,
+        corrected: true,
+    }),
+    false
+);
+assert.equal(
+    shouldAcceptOcrConsensus({
+        count: 3,
+        totalConfidence: 90,
+        corrected: true,
+    }),
+    true
+);
 
 console.log('All OCR utility tests passed.');
