@@ -2037,7 +2037,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 || formatPlateForDisplay(resolvedPlate.normalized)
             );
             window.showToast(
-                `Araç forma aktarıldı: ${transferredLabel}${registrationNote}`,
+                `Plaka forma aktarıldı: ${transferredLabel}${registrationNote}`,
                 'success'
             );
         });
@@ -2177,7 +2177,7 @@ document.addEventListener('DOMContentLoaded', () => {
             
             manualTitle.textContent = 'Kilometre ve İşlem Bilgileri';
             manualSubtitle.textContent =
-                `${getVehicleDisplayLabel(state.plate)} | Kullanım: ${state.actionType}`;
+                `Plaka: ${getVehicleDisplayLabel(state.plate)} | Kullanım: ${state.actionType}`;
             
             stepPlateContainer.classList.add('hidden');
             stepMileageContainer.classList.remove('hidden');
