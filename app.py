@@ -87,11 +87,55 @@ VEHICLE_USAGE_PURPOSES = (
     "Proje - Arıza - Bakım",
 )
 
-# Dummy veri tabanı simülasyonu - Plakalar ve Araç İsimleri
+# Dummy veri tabanı simülasyonu - Detaylı araç tanımları
 VEHICLES_DB = {
-    "34KM4969": "2016 TRANSİT/TOUR...",
-    "34EZS794": "RENAULT 2016 CLIO"
+    "34KM4969": {
+        "brand": "FORD",
+        "model": "TRANSIT/TOURNEO",
+        "year": 2016,
+    },
+    "34EZS794": {
+        "brand": "RENAULT",
+        "model": "CLIO",
+        "year": 2016,
+    },
 }
+
+
+def get_vehicle_name(vehicle):
+    if isinstance(vehicle, str):
+        return vehicle.strip() or "Bilinmeyen Araç"
+    if not isinstance(vehicle, dict):
+        return "Bilinmeyen Araç"
+
+    brand = str(vehicle.get("brand") or "").strip()
+    model = str(vehicle.get("model") or "").strip()
+    year = str(vehicle.get("year") or "").strip()
+    return " ".join(part for part in (brand, year, model) if part) or "Bilinmeyen Araç"
+
+
+def format_plate_for_display(plate):
+    compact = re.sub(r"[^A-Z0-9]", "", str(plate or "").upper())
+    match = re.fullmatch(r"(\d{2})([A-Z]{1,3})(\d{2,5})", compact)
+    if not match:
+        return compact
+    return " ".join(match.groups())
+
+
+def serialize_vehicle(plate, vehicle):
+    vehicle_name = get_vehicle_name(vehicle)
+    display_plate = format_plate_for_display(plate)
+    details = vehicle if isinstance(vehicle, dict) else {}
+    return {
+        "plate": plate,
+        "display_plate": display_plate,
+        "brand": str(details.get("brand") or "").strip(),
+        "model": str(details.get("model") or "").strip(),
+        "year": details.get("year"),
+        "vehicle_name": vehicle_name,
+        "display_label": f"{vehicle_name} - {display_plate}",
+    }
+
 
 # Aktif (Başlamış ama bitmemiş) hareketler: plate -> { details }
 ACTIVE_TRIPS = {}
@@ -101,7 +145,7 @@ RECORDS_DB = [
     {
         "action_type": "Diğer",
         "add_date": "19.01.2026 15:03:40",
-        "vehicle_name": "2016 TRANSİT/TOUR...",
+        "vehicle_name": "FORD 2016 TRANSIT/TOURNEO",
         "plate": "34KM4969",
         "driver": "Koray BAYRAM",
         "start_mileage": "193.286",
@@ -127,7 +171,7 @@ RECORDS_DB = [
     {
         "action_type": "Periyodik Bakım",
         "add_date": "19.01.2026 15:05:29",
-        "vehicle_name": "2016 TRANSİT/TOUR...",
+        "vehicle_name": "FORD 2016 TRANSIT/TOURNEO",
         "plate": "34KM4969",
         "driver": "Koray BAYRAM",
         "start_mileage": "193.374",
@@ -140,7 +184,7 @@ RECORDS_DB = [
     {
         "action_type": "Kurum İçi Operasyonlar",
         "add_date": "19.01.2026 15:06:38",
-        "vehicle_name": "2016 TRANSİT/TOUR...",
+        "vehicle_name": "FORD 2016 TRANSIT/TOURNEO",
         "plate": "34KM4969",
         "driver": "Koray BAYRAM",
         "start_mileage": "193.391",
@@ -190,7 +234,15 @@ def login():
 
 @app.route('/api/plates', methods=['GET'])
 def get_plates():
-    return jsonify({"success": True, "plates": list(VEHICLES_DB.keys())}), 200
+    vehicles = [
+        serialize_vehicle(plate, vehicle)
+        for plate, vehicle in VEHICLES_DB.items()
+    ]
+    return jsonify({
+        "success": True,
+        "plates": [vehicle["plate"] for vehicle in vehicles],
+        "vehicles": vehicles,
+    }), 200
 
 @app.route('/api/record', methods=['POST'])
 def save_record():
@@ -212,7 +264,7 @@ def save_record():
     if not plate or not action or not user:
         return jsonify({"success": False, "message": "Eksik veri gönderildi."}), 400
         
-    vehicle_name = VEHICLES_DB.get(plate, "Bilinmeyen Araç")
+    vehicle_name = get_vehicle_name(VEHICLES_DB.get(plate))
     now_str = datetime.now().strftime("%d.%m.%Y %H:%M:%S")
     
     if action == 'pickup':

@@ -76,6 +76,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const manualSubtitle = document.getElementById('manual-subtitle');
     
     const plateSelect = document.getElementById('plate-select');
+    const selectedVehicleInfo = document.getElementById('selected-vehicle-info');
     const actionTypeSelect = document.getElementById('action-type-select');
     const mileageInput = document.getElementById('mileage-input');
     const requestNoInput = document.getElementById('request-no-input');
@@ -97,6 +98,82 @@ document.addEventListener('DOMContentLoaded', () => {
         serviceFormNo: null,
         notes: null
     };
+    let registeredVehiclesByPlate = new Map();
+
+    function formatPlateForDisplay(value) {
+        const parsed = parseTurkishPlate(
+            String(value || ''),
+            { allowOcrCorrections: false }
+        );
+        if (!parsed) {
+            return String(value || '').trim().toUpperCase();
+        }
+        return [
+            parsed.provinceCode.toString().padStart(2, '0'),
+            parsed.letters,
+            parsed.digits,
+        ].join(' ');
+    }
+
+    function normalizeVehicleDetails(vehicle) {
+        const rawVehicle = typeof vehicle === 'string'
+            ? { plate: vehicle }
+            : vehicle;
+        if (!rawVehicle || typeof rawVehicle !== 'object') return null;
+
+        const parsedPlate = parseTurkishPlate(
+            String(rawVehicle.plate || ''),
+            { allowOcrCorrections: false }
+        );
+        if (!parsedPlate) return null;
+
+        const plate = parsedPlate.normalized;
+        const vehicleName = String(rawVehicle.vehicle_name || '').trim();
+        const displayPlate = String(
+            rawVehicle.display_plate || formatPlateForDisplay(plate)
+        ).trim();
+        const displayLabel = String(
+            rawVehicle.display_label
+            || (vehicleName ? `${vehicleName} - ${displayPlate}` : displayPlate)
+        ).trim();
+        return {
+            ...rawVehicle,
+            plate,
+            displayPlate,
+            vehicleName,
+            displayLabel,
+        };
+    }
+
+    function getVehicleDetails(plate) {
+        const parsed = parseTurkishPlate(
+            String(plate || ''),
+            { allowOcrCorrections: false }
+        );
+        return parsed
+            ? registeredVehiclesByPlate.get(parsed.normalized) || null
+            : null;
+    }
+
+    function getVehicleDisplayLabel(plate) {
+        return (
+            getVehicleDetails(plate)?.displayLabel
+            || formatPlateForDisplay(plate)
+        );
+    }
+
+    function updateSelectedVehicleInfo(plate) {
+        if (!selectedVehicleInfo) return;
+        const vehicle = getVehicleDetails(plate);
+        if (!vehicle?.vehicleName) {
+            selectedVehicleInfo.textContent = '';
+            selectedVehicleInfo.classList.add('hidden');
+            return;
+        }
+
+        selectedVehicleInfo.textContent = `Araç: ${vehicle.displayLabel}`;
+        selectedVehicleInfo.classList.remove('hidden');
+    }
 
     // Tüm ekranları gizleme yardımcı fonksiyonu
     function hideAllSections() {
@@ -151,6 +228,7 @@ document.addEventListener('DOMContentLoaded', () => {
         requestNoInput.value = '';
         serviceFormNoInput.value = '';
         notesInput.value = '';
+        updateSelectedVehicleInfo('');
         
         dashboardTitle.textContent = title;
         
@@ -305,6 +383,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const ocrResultText = document.getElementById('ocr-result-text');
     const ocrConfidence = document.getElementById('ocr-confidence');
     const ocrDbStatus = document.getElementById('ocr-db-status');
+    const ocrVehicleInfoContainer = document.getElementById(
+        'ocr-vehicle-info-container'
+    );
+    const ocrVehicleInfo = document.getElementById('ocr-vehicle-info');
     const ocrConfirmBtn = document.getElementById('ocr-confirm-btn');
     const ocrEditBtn = document.getElementById('ocr-edit-btn');
     const ocrRetryBtn = document.getElementById('ocr-retry-btn');
@@ -315,6 +397,19 @@ document.addEventListener('DOMContentLoaded', () => {
 
     let currentOcrPlate = null;
     let currentOcrSource = null;
+
+    function updateOcrVehicleInfo(plate) {
+        if (!ocrVehicleInfoContainer || !ocrVehicleInfo) return;
+        const vehicle = getVehicleDetails(plate);
+        if (!vehicle?.vehicleName) {
+            ocrVehicleInfo.textContent = '';
+            ocrVehicleInfoContainer.classList.add('hidden');
+            return;
+        }
+
+        ocrVehicleInfo.textContent = vehicle.displayLabel;
+        ocrVehicleInfoContainer.classList.remove('hidden');
+    }
 
     function getRegisteredPlateOptions() {
         return Array.from(plateSelect.options).filter(
@@ -1571,6 +1666,7 @@ document.addEventListener('DOMContentLoaded', () => {
             ocrConfirmBtn.disabled = false;
             ocrConfirmBtn.style.opacity = '1';
         }
+        updateOcrVehicleInfo(currentMatchedOption?.value || currentOcrPlate);
 
         if (bestMatch.estimated) {
             ocrManualEditContainer.classList.remove('hidden');
@@ -1936,8 +2032,12 @@ document.addEventListener('DOMContentLoaded', () => {
             closeCameraSafely();
 
             const registrationNote = resolvedPlate.registered ? '' : ' (kayıt dışı araç)';
+            const transferredLabel = (
+                option.dataset.vehicleLabel
+                || formatPlateForDisplay(resolvedPlate.normalized)
+            );
             window.showToast(
-                `Plaka forma aktarıldı: ${resolvedPlate.normalized}${registrationNote}`,
+                `Araç forma aktarıldı: ${transferredLabel}${registrationNote}`,
                 'success'
             );
         });
@@ -1981,6 +2081,9 @@ document.addEventListener('DOMContentLoaded', () => {
             ocrDbStatus.textContent = '⚠️ Geçerli • Araç Kayıtlı Değil';
             ocrDbStatus.style.color = '#facc15';
         }
+        updateOcrVehicleInfo(
+            resolvedPlate?.option?.value || resolvedPlate?.normalized
+        );
     }
 
     function clearCanvas(canvas) {
@@ -2074,7 +2177,7 @@ document.addEventListener('DOMContentLoaded', () => {
             
             manualTitle.textContent = 'Kilometre ve İşlem Bilgileri';
             manualSubtitle.textContent =
-                `Plaka: ${state.plate} | Kullanım: ${state.actionType}`;
+                `${getVehicleDisplayLabel(state.plate)} | Kullanım: ${state.actionType}`;
             
             stepPlateContainer.classList.add('hidden');
             stepMileageContainer.classList.remove('hidden');
@@ -2085,6 +2188,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     plateSelect.addEventListener('change', (e) => {
+        updateSelectedVehicleInfo(e.target.value);
         if (state.currentStep === 1) processBtn.disabled = (e.target.value === "");
     });
 
@@ -2134,6 +2238,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     serviceFormNoInput.value = '';
                     notesInput.value = '';
                     plateSelect.value = '';
+                    updateSelectedVehicleInfo('');
                     processBtn.disabled = false;
                     setTimeout(() => showActionSelection(), 2500);
                 } else {
@@ -2192,7 +2297,8 @@ document.addEventListener('DOMContentLoaded', () => {
     viewVehicleReportBtn.addEventListener('click', () => {
         const selectedPlate = reportPlateSelect.value;
         if(selectedPlate) {
-            reportTitle.textContent = `🚗 Araç Raporu: ${selectedPlate}`;
+            reportTitle.textContent =
+                `🚗 Araç Raporu: ${getVehicleDisplayLabel(selectedPlate)}`;
             fetchAndShowReport(`/api/reports/plate/${encodeURIComponent(selectedPlate)}`);
         }
     });
@@ -2350,7 +2456,23 @@ document.addEventListener('DOMContentLoaded', () => {
             const response = await fetch('/api/plates');
             const result = await response.json();
             if (response.ok && result.success) {
-                return result.plates;
+                const detailedVehicles = (
+                    Array.isArray(result.vehicles) ? result.vehicles : []
+                )
+                    .map(normalizeVehicleDetails)
+                    .filter(Boolean);
+                const fallbackVehicles = (
+                    Array.isArray(result.plates) ? result.plates : []
+                )
+                    .map(normalizeVehicleDetails)
+                    .filter(Boolean);
+                const vehicles = detailedVehicles.length > 0
+                    ? detailedVehicles
+                    : fallbackVehicles;
+                registeredVehiclesByPlate = new Map(
+                    vehicles.map(vehicle => [vehicle.plate, vehicle])
+                );
+                return Array.from(registeredVehiclesByPlate.values());
             }
         } catch (error) {
             console.error("Plaka API hatası:", error);
@@ -2359,22 +2481,29 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     async function loadPlatesForDashboard() {
-        const plates = await fetchPlatesAPI();
+        const vehicles = await fetchPlatesAPI();
         plateSelect.innerHTML = '<option value="" disabled selected>Plaka Seçin...</option>';
-        plates.forEach(p => {
+        vehicles.forEach(vehicle => {
             const opt = document.createElement('option');
-            opt.value = p; opt.dataset.plate = p; opt.textContent = p;
+            opt.value = vehicle.plate;
+            opt.dataset.plate = vehicle.plate;
+            opt.dataset.vehicleLabel = vehicle.displayLabel;
+            opt.textContent = vehicle.displayLabel;
             plateSelect.appendChild(opt);
         });
         if (state.plate) plateSelect.value = state.plate;
+        updateSelectedVehicleInfo(plateSelect.value);
     }
 
     async function loadPlatesForReport() {
-        const plates = await fetchPlatesAPI();
+        const vehicles = await fetchPlatesAPI();
         reportPlateSelect.innerHTML = '<option value="" disabled selected>Plaka Seçin...</option>';
-        plates.forEach(p => {
+        vehicles.forEach(vehicle => {
             const opt = document.createElement('option');
-            opt.value = p; opt.dataset.plate = p; opt.textContent = p;
+            opt.value = vehicle.plate;
+            opt.dataset.plate = vehicle.plate;
+            opt.dataset.vehicleLabel = vehicle.displayLabel;
+            opt.textContent = vehicle.displayLabel;
             reportPlateSelect.appendChild(opt);
         });
         viewVehicleReportBtn.disabled = true;

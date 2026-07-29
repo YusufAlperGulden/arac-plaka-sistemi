@@ -1,4 +1,5 @@
 import base64
+import copy
 import io
 import json
 import unittest
@@ -333,11 +334,14 @@ class RecordApiTests(unittest.TestCase):
             dict(record)
             for record in app_module.RECORDS_DB
         ]
+        self.vehicles_snapshot = copy.deepcopy(app_module.VEHICLES_DB)
 
     def tearDown(self):
         app_module.ACTIVE_TRIPS.clear()
         app_module.ACTIVE_TRIPS.update(self.active_trips_snapshot)
         app_module.RECORDS_DB[:] = self.records_snapshot
+        app_module.VEHICLES_DB.clear()
+        app_module.VEHICLES_DB.update(self.vehicles_snapshot)
 
     def test_usage_purpose_catalog_is_rendered_in_form_and_filter(self):
         expected_purposes = (
@@ -355,6 +359,127 @@ class RecordApiTests(unittest.TestCase):
         for purpose in expected_purposes:
             with self.subTest(purpose=purpose):
                 self.assertEqual(html.count(f'value="{purpose}"'), 2)
+
+    def test_vehicle_catalog_keeps_legacy_plates_and_adds_details(self):
+        response = self.client.get("/api/plates")
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.get_json()
+        self.assertEqual(
+            payload["plates"],
+            ["34KM4969", "34EZS794"],
+        )
+
+        vehicles_by_plate = {
+            vehicle["plate"]: vehicle
+            for vehicle in payload["vehicles"]
+        }
+        renault = vehicles_by_plate["34EZS794"]
+        self.assertEqual(renault["brand"], "RENAULT")
+        self.assertEqual(renault["model"], "CLIO")
+        self.assertEqual(renault["year"], 2016)
+        self.assertEqual(renault["vehicle_name"], "RENAULT 2016 CLIO")
+        self.assertEqual(renault["display_plate"], "34 EZS 794")
+        self.assertEqual(
+            renault["display_label"],
+            "RENAULT 2016 CLIO - 34 EZS 794",
+        )
+
+    def test_vehicle_helpers_support_structured_and_legacy_entries(self):
+        details = {
+            "brand": "TOYOTA",
+            "model": "COROLLA",
+            "year": 2022,
+        }
+        original = dict(details)
+
+        self.assertEqual(
+            app_module.get_vehicle_name(details),
+            "TOYOTA 2022 COROLLA",
+        )
+        self.assertEqual(
+            app_module.get_vehicle_name("  Eski Araç Tanımı  "),
+            "Eski Araç Tanımı",
+        )
+        self.assertEqual(
+            app_module.get_vehicle_name(None),
+            "Bilinmeyen Araç",
+        )
+        self.assertEqual(
+            app_module.format_plate_for_display("34EZS794"),
+            "34 EZS 794",
+        )
+        self.assertEqual(details, original)
+
+        legacy = app_module.serialize_vehicle(
+            "06A12345",
+            "Legacy Vehicle",
+        )
+        self.assertEqual(legacy["vehicle_name"], "Legacy Vehicle")
+        self.assertEqual(legacy["display_label"], "Legacy Vehicle - 06 A 12345")
+        self.assertEqual(legacy["brand"], "")
+        self.assertEqual(legacy["model"], "")
+        self.assertIsNone(legacy["year"])
+
+    def test_vehicle_details_are_rendered_in_mobile_flow(self):
+        html = self.client.get("/").get_data(as_text=True)
+
+        self.assertIn('id="selected-vehicle-info"', html)
+        self.assertIn('id="ocr-vehicle-info"', html)
+        self.assertIn(">Araç Bilgisi<", html)
+        self.assertIn("/static/js/main.js?v=17", html)
+
+    def test_registered_vehicle_name_is_saved_on_dropoff(self):
+        plate = "34EZS794"
+        app_module.ACTIVE_TRIPS.pop(plate, None)
+
+        response = self.client.post(
+            "/api/record",
+            json={
+                "plate": plate,
+                "action": "dropoff",
+                "action_type": "Diğer",
+                "mileage": "151900",
+                "user": "admin",
+                "notes": "",
+            },
+        )
+
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(
+            app_module.RECORDS_DB[-1]["vehicle_name"],
+            "RENAULT 2016 CLIO",
+        )
+
+    def test_legacy_vehicle_entry_still_works_in_api_and_recording(self):
+        plate = "06A12345"
+        app_module.VEHICLES_DB[plate] = "Legacy Vehicle"
+
+        catalog = self.client.get("/api/plates").get_json()
+        legacy_vehicle = next(
+            vehicle
+            for vehicle in catalog["vehicles"]
+            if vehicle["plate"] == plate
+        )
+        self.assertEqual(legacy_vehicle["vehicle_name"], "Legacy Vehicle")
+
+        response = self.client.post(
+            "/api/record",
+            json={
+                "plate": plate,
+                "action": "dropoff",
+                "action_type": "Diğer",
+                "mileage": "10",
+                "user": "admin",
+                "notes": "",
+            },
+        )
+
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(
+            app_module.RECORDS_DB[-1]["vehicle_name"],
+            "Legacy Vehicle",
+        )
 
     def test_optional_company_fields_survive_pickup_and_dropoff(self):
         plate = "34KM4969"

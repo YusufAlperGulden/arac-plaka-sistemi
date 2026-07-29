@@ -293,6 +293,7 @@
                             <option value="" disabled selected>Plaka Seçin...</option>
                             <!-- Seçenekler JS ile dinamik olarak backend'den doldurulacak -->
                         </select>
+                        <p id="selected-vehicle-info" class="subtitle hidden" aria-live="polite" style="margin: 10px 0 0;"></p>
 
                         <label for="action-type-select" style="margin-top: 15px;">Kullanım Amacı</label>
                         <select id="action-type-select" name="action-type-select">
@@ -327,7 +328,7 @@
 
     <!-- OCR Onay Modalı (Overlay) -->
     <div id="ocr-confirm-modal" class="hidden" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.85); z-index: 9999; display: flex; align-items: center; justify-content: center;">
-        <div class="glass-card" style="width: 90%; max-width: 400px; padding: 25px; text-align: center; border: 1px solid var(--accent-color);">
+        <div class="glass-card" style="width: 90%; max-width: 400px; max-height: calc(100vh - 24px); max-height: calc(100dvh - 24px); overflow-y: auto; padding: 25px; text-align: center; border: 1px solid var(--accent-color);">
             <h2 style="margin-bottom: 15px; color: white;">Plaka Doğrulama</h2>
             
             <div style="background: rgba(15, 23, 42, 0.6); padding: 15px; border-radius: 8px; margin-bottom: 20px;">
@@ -351,6 +352,11 @@
                 <div style="margin-top: 10px; font-size: 0.95rem; display: flex; justify-content: space-between; align-items: center;">
                     <span style="color: #94a3b8;">Kayıt Durumu:</span>
                     <span id="ocr-db-status" style="font-weight: bold;">...</span>
+                </div>
+
+                <div id="ocr-vehicle-info-container" class="hidden" style="margin-top: 12px; padding-top: 12px; border-top: 1px solid rgba(148, 163, 184, 0.25); text-align: left;">
+                    <span style="display: block; color: #94a3b8; font-size: 0.85rem; margin-bottom: 4px;">Araç Bilgisi</span>
+                    <span id="ocr-vehicle-info" style="display: block; color: white; font-weight: bold; line-height: 1.35;" aria-live="polite"></span>
                 </div>
             </div>
 
@@ -376,8 +382,8 @@
     <script src="/static/js/camera.js"></script>
     <!-- Tesseract.js for OCR -->
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
-    <script src="/static/js/ocr-utils.js?v=16"></script>
-    <script src="/static/js/main.js?v=16"></script>
+    <script src="/static/js/ocr-utils.js?v=17"></script>
+    <script src="/static/js/main.js?v=17"></script>
 
     <script>
         // Sayfa değiştiğinde ana başlığı (Fatura İşleme Sistemi benzeri) gizle/göster
