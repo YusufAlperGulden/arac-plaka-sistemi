@@ -9,10 +9,11 @@ window.showToast = function(message, type = 'error') {
     const container = document.getElementById('toast-container');
     const toast = document.createElement('div');
     toast.className = `toast ${type}`;
-    toast.innerHTML = `
-        <span>${type === 'error' ? '❌' : '✅'}</span>
-        <p>${message}</p>
-    `;
+    const icon = document.createElement('span');
+    const text = document.createElement('p');
+    icon.textContent = type === 'error' ? '❌' : '✅';
+    text.textContent = String(message || '');
+    toast.append(icon, text);
     
     container.appendChild(toast);
     
@@ -65,7 +66,13 @@ document.addEventListener('DOMContentLoaded', () => {
                     // Giriş başarılı, ana ekrana (dashboard) geçişi tetikle
                     // Bu fonksiyon main.js içinde tanımlı
                     if (typeof window.switchToDashboard === 'function') {
-                        setTimeout(() => window.switchToDashboard(username), 500);
+                        setTimeout(
+                            () => window.switchToDashboard(
+                                username,
+                                Boolean(result.is_admin)
+                            ),
+                            500
+                        );
                     }
                 } else {
                     window.showToast(result.message || 'Giriş başarısız.', 'error');

@@ -1,13 +1,25 @@
 import base64
-import copy
 import io
 import json
+import os
 import unittest
 from types import SimpleNamespace
 
 from PIL import Image
 
+# The application initializes its database while it is imported. Keep the test
+# database isolated from any developer or deployment database.
+os.environ["DATABASE_URL"] = "sqlite+pysqlite:///:memory:"
+
 import app as app_module
+from models import ActiveTrip, MovementRecord, db
+
+
+def reset_seeded_database():
+    with app_module.app.app_context():
+        db.session.remove()
+        db.drop_all()
+        app_module.initialize_database()
 
 
 def make_image_data_url(declared_mime="image/jpeg", size=(320, 120)):
@@ -40,11 +52,14 @@ class OcrApiTests(unittest.TestCase):
             SESSION_COOKIE_SECURE=False,
             RATELIMIT_ENABLED=False,
         )
+        reset_seeded_database()
         app_module.limiter.reset()
         self.client = app_module.app.test_client()
 
     def tearDown(self):
         app_module.gemini_client = self.original_client
+        with app_module.app.app_context():
+            db.session.remove()
 
     def authenticate(self):
         with self.client.session_transaction() as session:
@@ -300,48 +315,42 @@ class OcrApiTests(unittest.TestCase):
 
     def test_unregistered_ocr_plate_can_continue_to_record_flow(self):
         plate = "02ABG585"
-        app_module.ACTIVE_TRIPS.pop(plate, None)
+        response = self.client.post(
+            "/api/record",
+            json={
+                "plate": plate,
+                "action": "pickup",
+                "action_type": "Diğer",
+                "mileage": "100",
+                "user": "admin",
+                "notes": "",
+            },
+        )
 
-        try:
-            response = self.client.post(
-                "/api/record",
-                json={
-                    "plate": plate,
-                    "action": "pickup",
-                    "action_type": "Diğer",
-                    "mileage": "100",
-                    "user": "admin",
-                    "notes": "",
-                },
+        self.assertEqual(response.status_code, 201)
+        self.assertTrue(response.get_json()["success"])
+        with app_module.app.app_context():
+            active_trip = db.session.scalar(
+                db.select(ActiveTrip).where(ActiveTrip.plate == plate)
             )
-
-            self.assertEqual(response.status_code, 201)
-            self.assertTrue(response.get_json()["success"])
-            self.assertIn(plate, app_module.ACTIVE_TRIPS)
-        finally:
-            app_module.ACTIVE_TRIPS.pop(plate, None)
+            self.assertIsNotNone(active_trip)
+            self.assertIsNone(active_trip.vehicle_id)
+            self.assertEqual(active_trip.vehicle_name, "Bilinmeyen Araç")
 
 
 class RecordApiTests(unittest.TestCase):
     def setUp(self):
-        app_module.app.config.update(TESTING=True)
+        app_module.app.config.update(
+            TESTING=True,
+            SESSION_COOKIE_SECURE=False,
+            RATELIMIT_ENABLED=False,
+        )
+        reset_seeded_database()
         self.client = app_module.app.test_client()
-        self.active_trips_snapshot = {
-            plate: dict(trip)
-            for plate, trip in app_module.ACTIVE_TRIPS.items()
-        }
-        self.records_snapshot = [
-            dict(record)
-            for record in app_module.RECORDS_DB
-        ]
-        self.vehicles_snapshot = copy.deepcopy(app_module.VEHICLES_DB)
 
     def tearDown(self):
-        app_module.ACTIVE_TRIPS.clear()
-        app_module.ACTIVE_TRIPS.update(self.active_trips_snapshot)
-        app_module.RECORDS_DB[:] = self.records_snapshot
-        app_module.VEHICLES_DB.clear()
-        app_module.VEHICLES_DB.update(self.vehicles_snapshot)
+        with app_module.app.app_context():
+            db.session.remove()
 
     def test_usage_purpose_catalog_is_rendered_in_form_and_filter(self):
         expected_purposes = (
@@ -427,11 +436,10 @@ class RecordApiTests(unittest.TestCase):
         self.assertIn('id="selected-vehicle-info"', html)
         self.assertIn('id="ocr-vehicle-info"', html)
         self.assertIn(">Araç Bilgisi<", html)
-        self.assertIn("/static/js/main.js?v=17", html)
+        self.assertIn("/static/js/main.js?v=18", html)
 
     def test_registered_vehicle_name_is_saved_on_dropoff(self):
         plate = "34EZS794"
-        app_module.ACTIVE_TRIPS.pop(plate, None)
 
         response = self.client.post(
             "/api/record",
@@ -446,22 +454,19 @@ class RecordApiTests(unittest.TestCase):
         )
 
         self.assertEqual(response.status_code, 201)
-        self.assertEqual(
-            app_module.RECORDS_DB[-1]["vehicle_name"],
-            "RENAULT 2016 CLIO",
-        )
+        with app_module.app.app_context():
+            record = db.session.scalar(
+                db.select(MovementRecord)
+                .where(MovementRecord.plate == plate)
+                .order_by(MovementRecord.id.desc())
+            )
+            self.assertEqual(record.vehicle_name, "RENAULT 2016 CLIO")
 
-    def test_legacy_vehicle_entry_still_works_in_api_and_recording(self):
+    def test_unregistered_vehicle_still_works_in_recording(self):
         plate = "06A12345"
-        app_module.VEHICLES_DB[plate] = "Legacy Vehicle"
 
         catalog = self.client.get("/api/plates").get_json()
-        legacy_vehicle = next(
-            vehicle
-            for vehicle in catalog["vehicles"]
-            if vehicle["plate"] == plate
-        )
-        self.assertEqual(legacy_vehicle["vehicle_name"], "Legacy Vehicle")
+        self.assertNotIn(plate, catalog["plates"])
 
         response = self.client.post(
             "/api/record",
@@ -476,10 +481,13 @@ class RecordApiTests(unittest.TestCase):
         )
 
         self.assertEqual(response.status_code, 201)
-        self.assertEqual(
-            app_module.RECORDS_DB[-1]["vehicle_name"],
-            "Legacy Vehicle",
-        )
+        with app_module.app.app_context():
+            record = db.session.scalar(
+                db.select(MovementRecord)
+                .where(MovementRecord.plate == plate)
+                .order_by(MovementRecord.id.desc())
+            )
+            self.assertEqual(record.vehicle_name, "Bilinmeyen Araç")
 
     def test_optional_company_fields_survive_pickup_and_dropoff(self):
         plate = "34KM4969"
@@ -498,14 +506,12 @@ class RecordApiTests(unittest.TestCase):
         )
 
         self.assertEqual(pickup_response.status_code, 201)
-        self.assertEqual(
-            app_module.ACTIVE_TRIPS[plate]["request_no"],
-            "TAL-2026-15",
-        )
-        self.assertEqual(
-            app_module.ACTIVE_TRIPS[plate]["service_form_no"],
-            "SRV-88",
-        )
+        with app_module.app.app_context():
+            active_trip = db.session.scalar(
+                db.select(ActiveTrip).where(ActiveTrip.plate == plate)
+            )
+            self.assertEqual(active_trip.request_no, "TAL-2026-15")
+            self.assertEqual(active_trip.service_form_no, "SRV-88")
 
         dropoff_response = self.client.post(
             "/api/record",
@@ -522,11 +528,19 @@ class RecordApiTests(unittest.TestCase):
         )
 
         self.assertEqual(dropoff_response.status_code, 201)
-        record = app_module.RECORDS_DB[-1]
-        self.assertEqual(record["action_type"], "Servis Amaçlı Kullanım")
-        self.assertEqual(record["request_no"], "TAL-2026-15")
-        self.assertEqual(record["service_form_no"], "SRV-88")
-        self.assertEqual(record["distance"], "25.0")
+        with app_module.app.app_context():
+            record = db.session.scalar(
+                db.select(MovementRecord)
+                .where(MovementRecord.plate == plate)
+                .order_by(MovementRecord.id.desc())
+            )
+            self.assertEqual(record.action_type, "Servis Amaçlı Kullanım")
+            self.assertEqual(record.request_no, "TAL-2026-15")
+            self.assertEqual(record.service_form_no, "SRV-88")
+            self.assertEqual(record.distance, "25.0")
+            self.assertIsNone(db.session.scalar(
+                db.select(ActiveTrip).where(ActiveTrip.plate == plate)
+            ))
 
         recent_record = self.client.get(
             "/api/reports/recent"
@@ -552,20 +566,37 @@ class RecordApiTests(unittest.TestCase):
         )
 
         self.assertEqual(response.status_code, 201)
-        record = app_module.RECORDS_DB[-1]
-        self.assertEqual(record["action_type"], "Müşteri Teslimatı")
-        self.assertEqual(record["request_no"], "")
-        self.assertEqual(record["service_form_no"], "")
+        with app_module.app.app_context():
+            record = db.session.scalar(
+                db.select(MovementRecord)
+                .where(MovementRecord.plate == plate)
+                .order_by(MovementRecord.id.desc())
+            )
+            self.assertEqual(record.action_type, "Müşteri Teslimatı")
+            self.assertEqual(record.request_no, "")
+            self.assertEqual(record.service_form_no, "")
 
     def test_legacy_active_trip_can_receive_fields_at_dropoff(self):
         plate = "34EZS794"
-        app_module.ACTIVE_TRIPS[plate] = {
-            "start_mileage": "300",
-            "start_date": "01.01.2026 08:00:00",
-            "driver": "admin",
-            "action_type": "Diğer",
-            "notes": "",
-        }
+        with app_module.app.app_context():
+            vehicle = db.session.scalar(
+                db.select(app_module.Vehicle).where(
+                    app_module.Vehicle.plate == plate
+                )
+            )
+            db.session.add(ActiveTrip(
+                vehicle_id=vehicle.id,
+                plate=plate,
+                vehicle_name=app_module.get_database_vehicle_name(vehicle),
+                start_mileage="300",
+                start_date=app_module.parse_legacy_datetime(
+                    "01.01.2026 08:00:00"
+                ),
+                driver="admin",
+                action_type="Diğer",
+                notes="",
+            ))
+            db.session.commit()
 
         response = self.client.post(
             "/api/record",
@@ -582,10 +613,15 @@ class RecordApiTests(unittest.TestCase):
         )
 
         self.assertEqual(response.status_code, 201)
-        record = app_module.RECORDS_DB[-1]
-        self.assertEqual(record["action_type"], "Proje - Arıza - Bakım")
-        self.assertEqual(record["request_no"], "TAL-LEGACY")
-        self.assertEqual(record["service_form_no"], "")
+        with app_module.app.app_context():
+            record = db.session.scalar(
+                db.select(MovementRecord)
+                .where(MovementRecord.plate == plate)
+                .order_by(MovementRecord.id.desc())
+            )
+            self.assertEqual(record.action_type, "Proje - Arıza - Bakım")
+            self.assertEqual(record.request_no, "TAL-LEGACY")
+            self.assertEqual(record.service_form_no, "")
 
 
 if __name__ == "__main__":

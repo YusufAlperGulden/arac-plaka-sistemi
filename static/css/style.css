@@ -100,7 +100,11 @@ body {
     animation: fadeIn 0.5s ease-in-out;
 }
 
-#dashboard-section, #report-detail-section {
+#dashboard-section,
+#report-detail-section,
+#active-vehicles-section,
+#fleet-management-section,
+#movement-type-management-section {
     flex-direction: column;
     justify-content: flex-start;
 }
@@ -173,6 +177,10 @@ body {
     gap: 20px;
 }
 
+.wide-action-btn {
+    grid-column: 1 / -1;
+}
+
 .action-big-btn {
     display: flex;
     flex-direction: column;
@@ -222,8 +230,9 @@ body {
     font-weight: 500;
 }
 
-.input-group input, 
-.input-group select {
+.input-group input,
+.input-group select,
+.input-group textarea {
     width: 100%;
     padding: 12px 16px;
     background: rgba(15, 23, 42, 0.6);
@@ -235,8 +244,14 @@ body {
     transition: all var(--transition-speed);
 }
 
-.input-group input:focus, 
-.input-group select:focus {
+.input-group textarea {
+    resize: vertical;
+    min-height: 90px;
+}
+
+.input-group input:focus,
+.input-group select:focus,
+.input-group textarea:focus {
     outline: none;
     border-color: var(--accent-color);
     box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.25);
@@ -624,6 +639,230 @@ button {
     margin-top: auto;
 }
 
+/* --- YÖNETİM EKRANLARI VE AKTİF ARAÇ PANOSU --- */
+.management-wrapper {
+    width: min(94%, 920px);
+    margin: 20px auto;
+    padding: 28px;
+}
+
+.management-header {
+    display: flex;
+    align-items: flex-start;
+    gap: 16px;
+    margin-bottom: 24px;
+}
+
+.management-header h2 {
+    margin-bottom: 5px;
+}
+
+.management-header p,
+.database-status-text {
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+}
+
+.database-status-text {
+    margin-top: 18px;
+    text-align: center;
+}
+
+.database-status-text.warning {
+    color: #facc15;
+}
+
+.summary-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    margin-bottom: 20px;
+}
+
+.summary-card {
+    padding: 16px;
+    border: 1px solid var(--glass-border);
+    border-radius: 12px;
+    background: rgba(15, 23, 42, 0.55);
+    text-align: center;
+}
+
+.summary-card span {
+    display: block;
+    color: var(--text-secondary);
+    font-size: 0.78rem;
+    margin-bottom: 6px;
+}
+
+.summary-card strong {
+    color: white;
+    font-size: 1.7rem;
+}
+
+.management-toolbar {
+    display: flex;
+    align-items: flex-end;
+    gap: 12px;
+    margin-bottom: 18px;
+}
+
+.compact-input {
+    flex: 1;
+    margin-bottom: 0;
+}
+
+.management-tabs {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    margin-bottom: 18px;
+}
+
+.management-tab {
+    min-height: 44px;
+    border-radius: 8px;
+    background: rgba(15, 23, 42, 0.55);
+    color: var(--text-secondary);
+    border: 1px solid var(--glass-border);
+    font-weight: 600;
+}
+
+.management-tab.active {
+    color: white;
+    border-color: var(--accent-color);
+    background: rgba(59, 130, 246, 0.2);
+}
+
+.management-panel {
+    display: block;
+}
+
+.management-panel.active {
+    display: block !important;
+}
+
+.management-form {
+    padding: 18px;
+    margin-bottom: 18px;
+}
+
+.management-form .input-group:last-of-type {
+    margin-bottom: 14px;
+}
+
+.checkbox-row {
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    margin-bottom: 14px;
+}
+
+.checkbox-row input {
+    width: 20px;
+    height: 20px;
+    accent-color: var(--accent-color);
+}
+
+.form-actions,
+.item-actions {
+    display: flex;
+    gap: 10px;
+}
+
+.form-actions .btn-primary {
+    flex: 1;
+}
+
+.management-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.management-item {
+    padding: 16px;
+    border: 1px solid var(--glass-border);
+    border-radius: 12px;
+    background: rgba(15, 23, 42, 0.55);
+    overflow-wrap: anywhere;
+}
+
+.management-item-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.management-item h3 {
+    font-size: 1rem;
+    margin-bottom: 4px;
+}
+
+.management-item p {
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    line-height: 1.45;
+}
+
+.management-item-details {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px 14px;
+    margin-top: 12px;
+}
+
+.management-item-details span {
+    color: var(--text-secondary);
+    font-size: 0.82rem;
+}
+
+.management-item-details strong {
+    color: white;
+    font-weight: 600;
+}
+
+.item-actions {
+    margin-top: 14px;
+    flex-wrap: wrap;
+}
+
+.item-actions button {
+    flex: 1;
+    min-height: 40px;
+}
+
+.status-badge {
+    display: inline-flex;
+    align-items: center;
+    border-radius: 999px;
+    padding: 5px 9px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    background: rgba(34, 197, 94, 0.16);
+    color: #4ade80;
+    white-space: nowrap;
+}
+
+.status-badge.inactive {
+    color: #fca5a5;
+    background: rgba(239, 68, 68, 0.16);
+}
+
+.status-badge.purpose {
+    color: #93c5fd;
+    background: rgba(59, 130, 246, 0.16);
+}
+
+.empty-state {
+    padding: 24px 12px;
+    color: var(--text-secondary);
+    text-align: center;
+}
+
 /* --- RESPONSIVE TASARIM (MOBİL UYUM) --- */
 @media (max-width: 768px) {
     .action-container {
@@ -638,8 +877,63 @@ button {
     .action-buttons-grid {
         grid-template-columns: 1fr;
     }
+    .wide-action-btn {
+        grid-column: auto;
+    }
+    .management-wrapper {
+        width: calc(100% - 20px);
+        padding: 16px;
+        margin: 10px auto;
+    }
+    .management-header {
+        align-items: flex-start;
+    }
+    .management-toolbar {
+        align-items: stretch;
+        flex-direction: column;
+    }
+    .management-toolbar .btn-outline {
+        width: 100%;
+        min-height: 44px;
+        margin-top: 0;
+    }
+    .management-item-details {
+        grid-template-columns: 1fr;
+    }
+    .management-item-header {
+        align-items: stretch;
+        flex-direction: column;
+    }
+    .management-item-header .status-badge {
+        align-self: flex-start;
+    }
+    .form-actions {
+        flex-direction: column;
+    }
+    .form-actions .btn-secondary {
+        min-height: 44px;
+    }
     .step-line {
         width: 20px;
+    }
+}
+
+@media (max-width: 390px) {
+    .summary-grid {
+        gap: 7px;
+    }
+    .summary-card {
+        padding: 12px 6px;
+    }
+    .summary-card strong {
+        font-size: 1.35rem;
+    }
+    .management-tabs {
+        gap: 5px;
+    }
+    .management-tab {
+        font-size: 0.78rem;
+        padding: 6px;
     }
 }
 

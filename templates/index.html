@@ -13,7 +13,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <!-- Özel CSS dosyamız -->
-    <link rel="stylesheet" href="/static/css/style.css">
+    <link rel="stylesheet" href="/static/css/style.css?v=18">
 </head>
 <body>
     <!-- Bildirim (Toast) Mesajları Alanı -->
@@ -79,6 +79,12 @@
                     <h3>Teslim Etme</h3>
                     <p>Aracı müşteriye teslim et</p>
                 </button>
+
+                <button id="active-vehicles-btn" class="action-big-btn glass-panel wide-action-btn">
+                    <div class="action-icon">🚙</div>
+                    <h3>Devam Eden Kullanımlar</h3>
+                    <p>Şu anda kullanımda olan araçları görüntüle</p>
+                </button>
             </div>
 
             <!-- Yeni Yönetim / Rapor Butonu -->
@@ -112,9 +118,189 @@
                     <h3>Araç Bazlı Hareket Raporu</h3>
                     <p>Plakaya göre geçmiş hareketler</p>
                 </button>
+
+                <button id="fleet-management-btn" class="action-big-btn glass-panel admin-only">
+                    <div class="action-icon">🛠️</div>
+                    <h3>Araç Tanımları</h3>
+                    <p>Marka, model ve araçları yönetin</p>
+                </button>
+
+                <button id="movement-type-management-btn" class="action-big-btn glass-panel admin-only">
+                    <div class="action-icon">🧭</div>
+                    <h3>Hareket Türleri</h3>
+                    <p>Kullanım amaçlarını yönetin</p>
+                </button>
             </div>
 
+            <p id="database-status-text" class="database-status-text admin-only" aria-live="polite"></p>
             <button id="back-from-reports-menu-btn" class="btn-secondary" style="margin-top: 30px; width: 100%;">⬅ Geri Dön</button>
+        </div>
+    </section>
+
+    <!-- Devam Eden Kullanımlar Panosu -->
+    <section id="active-vehicles-section" class="screen-section hidden">
+        <div class="glass-card management-wrapper">
+            <div class="management-header">
+                <button id="back-from-active-vehicles-btn" class="btn-secondary">⬅ Geri</button>
+                <div>
+                    <h2>Devam Eden Kullanımlar</h2>
+                    <p>Şu anda kullanımda olan araçların güncel durumu.</p>
+                </div>
+            </div>
+
+            <div class="summary-grid" aria-label="Araç durumu özeti">
+                <div class="summary-card">
+                    <span>Toplam Araç</span>
+                    <strong id="active-total-count">0</strong>
+                </div>
+                <div class="summary-card">
+                    <span>Devam Eden</span>
+                    <strong id="active-trip-count">0</strong>
+                </div>
+                <div class="summary-card">
+                    <span>Müsait</span>
+                    <strong id="available-vehicle-count">0</strong>
+                </div>
+            </div>
+
+            <div class="management-toolbar">
+                <div class="input-group compact-input">
+                    <label for="active-trip-search">Ara</label>
+                    <input id="active-trip-search" type="search" placeholder="Plaka, araç, sürücü veya amaç ara...">
+                </div>
+                <button id="refresh-active-trips-btn" class="btn-outline">🔄 Yenile</button>
+            </div>
+
+            <div id="active-trip-list" class="management-list" aria-live="polite">
+                <p class="empty-state">Yükleniyor...</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- Marka / Model / Araç Yönetimi -->
+    <section id="fleet-management-section" class="screen-section hidden">
+        <div class="glass-card management-wrapper">
+            <div class="management-header">
+                <button id="back-from-fleet-management-btn" class="btn-secondary">⬅ Geri</button>
+                <div>
+                    <h2>Araç Tanımları</h2>
+                    <p>Marka, model ve kayıtlı araçları tek yerden yönetin.</p>
+                </div>
+            </div>
+
+            <div class="management-tabs" role="tablist" aria-label="Araç tanımları">
+                <button class="management-tab active" data-fleet-tab="brands" type="button">Markalar</button>
+                <button class="management-tab" data-fleet-tab="models" type="button">Modeller</button>
+                <button class="management-tab" data-fleet-tab="vehicles" type="button">Araçlar</button>
+            </div>
+
+            <div id="fleet-brands-panel" class="management-panel active">
+                <form id="brand-form" class="management-form glass-panel">
+                    <input id="brand-id" type="hidden">
+                    <div class="input-group">
+                        <label for="brand-name">Marka Adı</label>
+                        <input id="brand-name" type="text" maxlength="80" placeholder="Örn: TOYOTA" required>
+                    </div>
+                    <label class="checkbox-row">
+                        <input id="brand-active" type="checkbox" checked>
+                        <span>Aktif</span>
+                    </label>
+                    <div class="form-actions">
+                        <button id="brand-save-btn" class="btn-primary" type="submit">Markayı Kaydet</button>
+                        <button id="brand-cancel-btn" class="btn-secondary hidden" type="button">Vazgeç</button>
+                    </div>
+                </form>
+                <div id="brand-list" class="management-list" aria-live="polite"></div>
+            </div>
+
+            <div id="fleet-models-panel" class="management-panel hidden">
+                <form id="model-form" class="management-form glass-panel">
+                    <input id="model-id" type="hidden">
+                    <div class="input-group">
+                        <label for="model-brand-select">Marka</label>
+                        <select id="model-brand-select" required></select>
+                    </div>
+                    <div class="input-group">
+                        <label for="model-name">Model Adı</label>
+                        <input id="model-name" type="text" maxlength="100" placeholder="Örn: COROLLA" required>
+                    </div>
+                    <label class="checkbox-row">
+                        <input id="model-active" type="checkbox" checked>
+                        <span>Aktif</span>
+                    </label>
+                    <div class="form-actions">
+                        <button id="model-save-btn" class="btn-primary" type="submit">Modeli Kaydet</button>
+                        <button id="model-cancel-btn" class="btn-secondary hidden" type="button">Vazgeç</button>
+                    </div>
+                </form>
+                <div id="model-list" class="management-list" aria-live="polite"></div>
+            </div>
+
+            <div id="fleet-vehicles-panel" class="management-panel hidden">
+                <form id="vehicle-form" class="management-form glass-panel">
+                    <input id="vehicle-id" type="hidden">
+                    <div class="input-group">
+                        <label for="vehicle-plate">Plaka</label>
+                        <input id="vehicle-plate" type="text" maxlength="16" placeholder="34 ABC 123" autocomplete="off" required>
+                    </div>
+                    <div class="input-group">
+                        <label for="vehicle-model-select">Marka ve Model</label>
+                        <select id="vehicle-model-select" required></select>
+                    </div>
+                    <div class="input-group">
+                        <label for="vehicle-year">Model Yılı</label>
+                        <input id="vehicle-year" type="number" min="1900" max="2100" placeholder="Örn: 2024">
+                    </div>
+                    <label class="checkbox-row">
+                        <input id="vehicle-active" type="checkbox" checked>
+                        <span>Aktif</span>
+                    </label>
+                    <div class="form-actions">
+                        <button id="vehicle-save-btn" class="btn-primary" type="submit">Aracı Kaydet</button>
+                        <button id="vehicle-cancel-btn" class="btn-secondary hidden" type="button">Vazgeç</button>
+                    </div>
+                </form>
+                <div id="vehicle-list" class="management-list" aria-live="polite"></div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Hareket Türleri Yönetimi -->
+    <section id="movement-type-management-section" class="screen-section hidden">
+        <div class="glass-card management-wrapper">
+            <div class="management-header">
+                <button id="back-from-movement-type-management-btn" class="btn-secondary">⬅ Geri</button>
+                <div>
+                    <h2>Hareket Türleri</h2>
+                    <p>Kullanım amacı seçeneklerini ve açıklamalarını yönetin.</p>
+                </div>
+            </div>
+
+            <form id="movement-type-form" class="management-form glass-panel">
+                <input id="movement-type-id" type="hidden">
+                <div class="input-group">
+                    <label for="movement-type-name">Hareket Türü Adı</label>
+                    <input id="movement-type-name" type="text" maxlength="120" required>
+                </div>
+                <div class="input-group">
+                    <label for="movement-type-description">Açıklama</label>
+                    <textarea id="movement-type-description" rows="3" maxlength="500"></textarea>
+                </div>
+                <div class="input-group">
+                    <label for="movement-type-sort-order">Sıra</label>
+                    <input id="movement-type-sort-order" type="number" value="0">
+                </div>
+                <label class="checkbox-row">
+                    <input id="movement-type-active" type="checkbox" checked>
+                    <span>Aktif</span>
+                </label>
+                <div class="form-actions">
+                    <button id="movement-type-save-btn" class="btn-primary" type="submit">Hareket Türünü Kaydet</button>
+                    <button id="movement-type-cancel-btn" class="btn-secondary hidden" type="button">Vazgeç</button>
+                </div>
+            </form>
+
+            <div id="movement-type-list" class="management-list" aria-live="polite"></div>
         </div>
     </section>
 
@@ -382,8 +568,8 @@
     <script src="/static/js/camera.js"></script>
     <!-- Tesseract.js for OCR -->
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
-    <script src="/static/js/ocr-utils.js?v=17"></script>
-    <script src="/static/js/main.js?v=17"></script>
+    <script src="/static/js/ocr-utils.js?v=18"></script>
+    <script src="/static/js/main.js?v=18"></script>
 
     <script>
         // Sayfa değiştiğinde ana başlığı (Fatura İşleme Sistemi benzeri) gizle/göster

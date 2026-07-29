@@ -36,17 +36,91 @@ document.addEventListener('DOMContentLoaded', () => {
     const reportsMenuSection = document.getElementById('reports-menu-section');
     const vehicleReportSelectionSection = document.getElementById('vehicle-report-selection-section');
     const reportDetailSection = document.getElementById('report-detail-section');
+    const activeVehiclesSection = document.getElementById('active-vehicles-section');
+    const fleetManagementSection = document.getElementById('fleet-management-section');
+    const movementTypeManagementSection = document.getElementById(
+        'movement-type-management-section'
+    );
     
     // ---- İŞLEM SEÇİM EKRANI BUTONLARI ----
     const pickupBtn = document.getElementById('action-pickup');
     const dropoffBtn = document.getElementById('action-dropoff');
+    const activeVehiclesBtn = document.getElementById('active-vehicles-btn');
     const reportMenuBtn = document.getElementById('action-report-btn');
     const actionLogoutBtn = document.getElementById('action-logout-btn');
     
     // ---- RAPORLAR MENÜSÜ BUTONLARI ----
     const reportRecentBtn = document.getElementById('report-recent-btn');
     const reportVehicleBtn = document.getElementById('report-vehicle-btn');
+    const fleetManagementBtn = document.getElementById('fleet-management-btn');
+    const movementTypeManagementBtn = document.getElementById(
+        'movement-type-management-btn'
+    );
     const backFromReportsMenuBtn = document.getElementById('back-from-reports-menu-btn');
+    const databaseStatusText = document.getElementById('database-status-text');
+
+    // ---- AKTİF ARAÇLAR PANOSU ----
+    const backFromActiveVehiclesBtn = document.getElementById(
+        'back-from-active-vehicles-btn'
+    );
+    const activeTripSearch = document.getElementById('active-trip-search');
+    const refreshActiveTripsBtn = document.getElementById(
+        'refresh-active-trips-btn'
+    );
+    const activeTripList = document.getElementById('active-trip-list');
+    const activeTotalCount = document.getElementById('active-total-count');
+    const activeTripCount = document.getElementById('active-trip-count');
+    const availableVehicleCount = document.getElementById(
+        'available-vehicle-count'
+    );
+
+    // ---- ARAÇ TANIMLARI YÖNETİMİ ----
+    const backFromFleetManagementBtn = document.getElementById(
+        'back-from-fleet-management-btn'
+    );
+    const fleetTabs = document.querySelectorAll('[data-fleet-tab]');
+    const brandForm = document.getElementById('brand-form');
+    const brandIdInput = document.getElementById('brand-id');
+    const brandNameInput = document.getElementById('brand-name');
+    const brandActiveInput = document.getElementById('brand-active');
+    const brandCancelBtn = document.getElementById('brand-cancel-btn');
+    const brandList = document.getElementById('brand-list');
+    const modelForm = document.getElementById('model-form');
+    const modelIdInput = document.getElementById('model-id');
+    const modelBrandSelect = document.getElementById('model-brand-select');
+    const modelNameInput = document.getElementById('model-name');
+    const modelActiveInput = document.getElementById('model-active');
+    const modelCancelBtn = document.getElementById('model-cancel-btn');
+    const modelList = document.getElementById('model-list');
+    const vehicleForm = document.getElementById('vehicle-form');
+    const vehicleIdInput = document.getElementById('vehicle-id');
+    const vehiclePlateInput = document.getElementById('vehicle-plate');
+    const vehicleModelSelect = document.getElementById('vehicle-model-select');
+    const vehicleYearInput = document.getElementById('vehicle-year');
+    const vehicleActiveInput = document.getElementById('vehicle-active');
+    const vehicleCancelBtn = document.getElementById('vehicle-cancel-btn');
+    const vehicleList = document.getElementById('vehicle-list');
+
+    // ---- HAREKET TÜRLERİ YÖNETİMİ ----
+    const backFromMovementTypeManagementBtn = document.getElementById(
+        'back-from-movement-type-management-btn'
+    );
+    const movementTypeForm = document.getElementById('movement-type-form');
+    const movementTypeIdInput = document.getElementById('movement-type-id');
+    const movementTypeNameInput = document.getElementById('movement-type-name');
+    const movementTypeDescriptionInput = document.getElementById(
+        'movement-type-description'
+    );
+    const movementTypeSortOrderInput = document.getElementById(
+        'movement-type-sort-order'
+    );
+    const movementTypeActiveInput = document.getElementById(
+        'movement-type-active'
+    );
+    const movementTypeCancelBtn = document.getElementById(
+        'movement-type-cancel-btn'
+    );
+    const movementTypeList = document.getElementById('movement-type-list');
 
     // ---- ARAÇ BAZLI RAPOR SEÇİM EKRANI ----
     const reportPlateSelect = document.getElementById('report-plate-select');
@@ -89,6 +163,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Uygulama Durumu (State)
     let state = {
         username: null,
+        isAdmin: false,
         currentAction: null, // 'pickup' veya 'dropoff'
         currentStep: 1,      // 1: Plaka, 2: Kilometre
         plate: null,
@@ -99,6 +174,13 @@ document.addEventListener('DOMContentLoaded', () => {
         notes: null
     };
     let registeredVehiclesByPlate = new Map();
+    let activeTripsCache = [];
+    let fleetCatalog = {
+        brands: [],
+        models: [],
+        vehicles: [],
+    };
+    let movementTypesCache = [];
 
     function formatPlateForDisplay(value) {
         const parsed = parseTurkishPlate(
@@ -193,8 +275,11 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // Global: Giriş sonrası tetiklenir (auth.js)
-    window.switchToDashboard = function(username) {
+    window.switchToDashboard = function(username, isAdmin = false) {
         state.username = username;
+        state.isAdmin = Boolean(isAdmin);
+        updateAdminVisibility();
+        loadMovementTypes();
         showActionSelection();
     };
 
@@ -207,14 +292,794 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('welcome-message').textContent = `Hoş geldin ${state.username}, lütfen yapmak istediğiniz işlemi seçin.`;
     }
 
+    function updateAdminVisibility() {
+        document.querySelectorAll('.admin-only').forEach(element => {
+            element.classList.toggle('hidden', !state.isAdmin);
+        });
+    }
+
+    async function apiRequest(url, options = {}) {
+        const response = await fetch(url, options);
+        let result = {};
+        try {
+            result = await response.json();
+        } catch (_error) {
+            result = {};
+        }
+        if (!response.ok || result.success === false) {
+            const error = new Error(
+                result.message || 'İşlem tamamlanamadı.'
+            );
+            error.status = response.status;
+            throw error;
+        }
+        return result;
+    }
+
+    function replaceSelectOptions(select, items, {
+        placeholder = null,
+        selectedValue = '',
+        valueKey = 'id',
+        labelKey = 'name',
+    } = {}) {
+        select.textContent = '';
+        if (placeholder) {
+            const placeholderOption = document.createElement('option');
+            placeholderOption.value = '';
+            placeholderOption.textContent = placeholder;
+            placeholderOption.disabled = true;
+            select.appendChild(placeholderOption);
+        }
+        items.forEach(item => {
+            const option = document.createElement('option');
+            option.value = String(item[valueKey]);
+            option.textContent = String(item[labelKey] || '');
+            select.appendChild(option);
+        });
+        const requestedValue = String(selectedValue || '');
+        if (
+            requestedValue
+            && Array.from(select.options).some(
+                option => option.value === requestedValue
+            )
+        ) {
+            select.value = requestedValue;
+        } else if (placeholder) {
+            select.value = '';
+        }
+    }
+
+    function showListMessage(container, message) {
+        container.textContent = '';
+        const paragraph = document.createElement('p');
+        paragraph.className = 'empty-state';
+        paragraph.textContent = message;
+        container.appendChild(paragraph);
+    }
+
+    function createStatusBadge(active, label = null) {
+        const badge = document.createElement('span');
+        badge.className = `status-badge${active ? '' : ' inactive'}`;
+        badge.textContent = label || (active ? 'Aktif' : 'Pasif');
+        return badge;
+    }
+
+    function createActionButton(label, className, handler) {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = className;
+        button.textContent = label;
+        button.addEventListener('click', handler);
+        return button;
+    }
+
+    async function loadMovementTypes() {
+        try {
+            const result = await apiRequest(
+                '/api/movement-types?include_inactive=1'
+            );
+            movementTypesCache = Array.from(result.movement_types || []);
+            const activeTypes = movementTypesCache.filter(item => item.active);
+            const previousAction = actionTypeSelect.value;
+            replaceSelectOptions(actionTypeSelect, activeTypes, {
+                selectedValue: activeTypes.some(
+                    item => item.name === previousAction
+                )
+                    ? previousAction
+                    : (
+                        activeTypes.some(item => item.name === 'Diğer')
+                            ? 'Diğer'
+                            : activeTypes[0]?.name || ''
+                    ),
+                valueKey: 'name',
+                labelKey: 'name',
+            });
+
+            const previousFilter = filterActionType.value;
+            const reportTypeNames = Array.from(new Set([
+                ...movementTypesCache.map(item => item.name),
+                ...currentRecords.map(record => record.action_type).filter(Boolean),
+            ])).sort((a, b) => a.localeCompare(b, 'tr'));
+            const filterItems = [
+                { value: 'all', label: 'Tüm Kullanım Amaçları' },
+                ...reportTypeNames.map(name => ({ value: name, label: name })),
+            ];
+            replaceSelectOptions(filterActionType, filterItems, {
+                selectedValue: filterItems.some(
+                    item => item.value === previousFilter
+                )
+                    ? previousFilter
+                    : 'all',
+                valueKey: 'value',
+                labelKey: 'label',
+            });
+        } catch (error) {
+            console.warn('Hareket türleri yüklenemedi:', error);
+        }
+    }
+
+    async function loadDatabaseStatus() {
+        if (!state.isAdmin || !databaseStatusText) return;
+        try {
+            const result = await apiRequest('/api/system/status');
+            databaseStatusText.classList.toggle(
+                'warning',
+                !result.persistent_database
+            );
+            databaseStatusText.textContent = result.persistent_database
+                ? 'Kalıcı PostgreSQL bağlantısı aktif.'
+                : 'Yerel SQLite kullanılıyor • Render için DATABASE_URL bağlantısı gerekli.';
+        } catch (error) {
+            databaseStatusText.classList.add('warning');
+            databaseStatusText.textContent =
+                'Veritabanı bağlantı durumu alınamadı.';
+        }
+    }
+
+    function formatElapsedTime(startAt) {
+        const startTime = new Date(startAt).getTime();
+        if (!Number.isFinite(startTime)) return '-';
+        const totalMinutes = Math.max(
+            0,
+            Math.floor((Date.now() - startTime) / 60000)
+        );
+        const days = Math.floor(totalMinutes / 1440);
+        const hours = Math.floor((totalMinutes % 1440) / 60);
+        const minutes = totalMinutes % 60;
+        if (days > 0) return `${days} gün ${hours} sa`;
+        if (hours > 0) return `${hours} sa ${minutes} dk`;
+        return `${minutes} dk`;
+    }
+
+    function renderActiveTrips() {
+        const searchValue = activeTripSearch.value.trim().toLocaleLowerCase('tr');
+        const filteredTrips = activeTripsCache.filter(item => {
+            const searchable = [
+                item.plate,
+                item.display_label,
+                item.driver,
+                item.action_type,
+                item.request_no,
+                item.service_form_no,
+            ].join(' ').toLocaleLowerCase('tr');
+            return searchable.includes(searchValue);
+        });
+
+        activeTripList.textContent = '';
+        if (filteredTrips.length === 0) {
+            showListMessage(
+                activeTripList,
+                searchValue
+                    ? 'Aramanızla eşleşen devam eden kullanım bulunamadı.'
+                    : 'Şu anda devam eden bir araç kullanımı bulunmuyor.'
+            );
+            return;
+        }
+
+        filteredTrips.forEach(item => {
+            const card = document.createElement('article');
+            card.className = 'management-item';
+
+            const header = document.createElement('div');
+            header.className = 'management-item-header';
+            const titleContainer = document.createElement('div');
+            const title = document.createElement('h3');
+            const driver = document.createElement('p');
+            title.textContent = item.display_label;
+            driver.textContent = `Sürücü: ${item.driver}`;
+            titleContainer.append(title, driver);
+            const purposeBadge = createStatusBadge(true, item.action_type);
+            purposeBadge.classList.add('purpose');
+            header.append(titleContainer, purposeBadge);
+
+            const details = document.createElement('div');
+            details.className = 'management-item-details';
+            const detailValues = [
+                ['Başlangıç', item.start_date],
+                ['Başlangıç KM', item.start_mileage],
+                ['Geçen Süre', formatElapsedTime(item.start_at)],
+            ];
+            if (item.request_no) {
+                detailValues.push(['Talep No', item.request_no]);
+            }
+            if (item.service_form_no) {
+                detailValues.push(['Servis Formu', item.service_form_no]);
+            }
+            detailValues.forEach(([label, value]) => {
+                const detail = document.createElement('span');
+                const strong = document.createElement('strong');
+                strong.textContent = `${label}: `;
+                detail.append(strong, document.createTextNode(value || '-'));
+                details.appendChild(detail);
+            });
+
+            const actions = document.createElement('div');
+            actions.className = 'item-actions';
+            actions.appendChild(createActionButton(
+                'Teslim Et',
+                'btn-primary',
+                () => startProcess(
+                    'Teslim Etme',
+                    'dropoff',
+                    item.plate,
+                    item.action_type
+                )
+            ));
+            card.append(header, details, actions);
+            activeTripList.appendChild(card);
+        });
+    }
+
+    async function loadActiveTrips() {
+        showListMessage(activeTripList, 'Yükleniyor...');
+        refreshActiveTripsBtn.disabled = true;
+        try {
+            const result = await apiRequest('/api/active-trips');
+            activeTripsCache = Array.from(result.items || []);
+            activeTotalCount.textContent = String(result.counts?.total || 0);
+            activeTripCount.textContent = String(result.counts?.active || 0);
+            availableVehicleCount.textContent = String(
+                result.counts?.available || 0
+            );
+            renderActiveTrips();
+        } catch (error) {
+            showListMessage(
+                activeTripList,
+                error.message || 'Devam eden kullanımlar alınamadı.'
+            );
+        } finally {
+            refreshActiveTripsBtn.disabled = false;
+        }
+    }
+
+    function showActiveVehicles() {
+        hideAllSections();
+        activeVehiclesSection.classList.remove('hidden');
+        activeVehiclesSection.classList.add('active');
+        activeTripSearch.value = '';
+        loadActiveTrips();
+    }
+
+    function showFleetTab(tabName) {
+        fleetTabs.forEach(tab => {
+            tab.classList.toggle(
+                'active',
+                tab.dataset.fleetTab === tabName
+            );
+        });
+        ['brands', 'models', 'vehicles'].forEach(name => {
+            const panel = document.getElementById(`fleet-${name}-panel`);
+            const isActive = name === tabName;
+            panel.classList.toggle('hidden', !isActive);
+            panel.classList.toggle('active', isActive);
+        });
+    }
+
+    function resetBrandForm() {
+        brandIdInput.value = '';
+        brandNameInput.value = '';
+        brandActiveInput.checked = true;
+        brandCancelBtn.classList.add('hidden');
+    }
+
+    function resetModelForm() {
+        modelIdInput.value = '';
+        modelNameInput.value = '';
+        modelActiveInput.checked = true;
+        modelCancelBtn.classList.add('hidden');
+        if (modelBrandSelect.options.length > 0) {
+            modelBrandSelect.selectedIndex = 0;
+        }
+    }
+
+    function resetVehicleForm() {
+        vehicleIdInput.value = '';
+        vehiclePlateInput.value = '';
+        vehicleYearInput.value = '';
+        vehicleActiveInput.checked = true;
+        vehicleCancelBtn.classList.add('hidden');
+        if (vehicleModelSelect.options.length > 0) {
+            vehicleModelSelect.selectedIndex = 0;
+        }
+    }
+
+    function populateFleetSelects() {
+        const brandItems = fleetCatalog.brands.map(brand => ({
+            ...brand,
+            display_name: brand.active
+                ? brand.name
+                : `${brand.name} (Pasif)`,
+        }));
+        replaceSelectOptions(modelBrandSelect, brandItems, {
+            placeholder: 'Marka Seçin...',
+            selectedValue: modelBrandSelect.value,
+            labelKey: 'display_name',
+        });
+
+        const modelItems = fleetCatalog.models.map(model => ({
+            ...model,
+            display_name: model.active
+                ? model.display_label
+                : `${model.display_label} (Pasif)`,
+        }));
+        replaceSelectOptions(vehicleModelSelect, modelItems, {
+            placeholder: 'Model Seçin...',
+            selectedValue: vehicleModelSelect.value,
+            labelKey: 'display_name',
+        });
+    }
+
+    function renderBrandList() {
+        brandList.textContent = '';
+        if (fleetCatalog.brands.length === 0) {
+            showListMessage(brandList, 'Henüz marka tanımlanmamış.');
+            return;
+        }
+        fleetCatalog.brands.forEach(brand => {
+            const card = document.createElement('article');
+            card.className = 'management-item';
+            const header = document.createElement('div');
+            header.className = 'management-item-header';
+            const text = document.createElement('div');
+            const title = document.createElement('h3');
+            const subtitle = document.createElement('p');
+            const modelCount = fleetCatalog.models.filter(
+                model => model.brand_id === brand.id
+            ).length;
+            title.textContent = brand.name;
+            subtitle.textContent = `${modelCount} model tanımlı`;
+            text.append(title, subtitle);
+            header.append(text, createStatusBadge(brand.active));
+
+            const actions = document.createElement('div');
+            actions.className = 'item-actions';
+            actions.append(
+                createActionButton('Düzenle', 'btn-secondary', () => {
+                    brandIdInput.value = String(brand.id);
+                    brandNameInput.value = brand.name;
+                    brandActiveInput.checked = brand.active;
+                    brandCancelBtn.classList.remove('hidden');
+                    brandNameInput.focus();
+                }),
+                createActionButton(
+                    brand.active ? 'Pasifleştir' : 'Aktifleştir',
+                    'btn-outline',
+                    () => toggleCatalogEntity(
+                        `/api/brands/${brand.id}`,
+                        { active: !brand.active }
+                    )
+                )
+            );
+            card.append(header, actions);
+            brandList.appendChild(card);
+        });
+    }
+
+    function renderModelList() {
+        modelList.textContent = '';
+        if (fleetCatalog.models.length === 0) {
+            showListMessage(modelList, 'Henüz model tanımlanmamış.');
+            return;
+        }
+        fleetCatalog.models.forEach(model => {
+            const card = document.createElement('article');
+            card.className = 'management-item';
+            const header = document.createElement('div');
+            header.className = 'management-item-header';
+            const text = document.createElement('div');
+            const title = document.createElement('h3');
+            const subtitle = document.createElement('p');
+            const vehicleCount = fleetCatalog.vehicles.filter(
+                vehicle => vehicle.model_id === model.id
+            ).length;
+            title.textContent = model.display_label;
+            subtitle.textContent = `${vehicleCount} araç tanımlı`;
+            text.append(title, subtitle);
+            header.append(text, createStatusBadge(model.active));
+
+            const actions = document.createElement('div');
+            actions.className = 'item-actions';
+            actions.append(
+                createActionButton('Düzenle', 'btn-secondary', () => {
+                    modelIdInput.value = String(model.id);
+                    modelBrandSelect.value = String(model.brand_id);
+                    modelNameInput.value = model.name;
+                    modelActiveInput.checked = model.active;
+                    modelCancelBtn.classList.remove('hidden');
+                    modelNameInput.focus();
+                }),
+                createActionButton(
+                    model.active ? 'Pasifleştir' : 'Aktifleştir',
+                    'btn-outline',
+                    () => toggleCatalogEntity(
+                        `/api/models/${model.id}`,
+                        { active: !model.active }
+                    )
+                )
+            );
+            card.append(header, actions);
+            modelList.appendChild(card);
+        });
+    }
+
+    function renderVehicleList() {
+        vehicleList.textContent = '';
+        if (fleetCatalog.vehicles.length === 0) {
+            showListMessage(vehicleList, 'Henüz araç tanımlanmamış.');
+            return;
+        }
+        fleetCatalog.vehicles.forEach(vehicle => {
+            const card = document.createElement('article');
+            card.className = 'management-item';
+            const header = document.createElement('div');
+            header.className = 'management-item-header';
+            const text = document.createElement('div');
+            const title = document.createElement('h3');
+            const subtitle = document.createElement('p');
+            title.textContent = vehicle.display_label;
+            subtitle.textContent = `Plaka anahtarı: ${vehicle.plate}`;
+            text.append(title, subtitle);
+            header.append(text, createStatusBadge(vehicle.active));
+
+            const actions = document.createElement('div');
+            actions.className = 'item-actions';
+            actions.append(
+                createActionButton('Düzenle', 'btn-secondary', () => {
+                    vehicleIdInput.value = String(vehicle.id);
+                    vehiclePlateInput.value = vehicle.display_plate;
+                    vehicleModelSelect.value = String(vehicle.model_id);
+                    vehicleYearInput.value = vehicle.year || '';
+                    vehicleActiveInput.checked = vehicle.active;
+                    vehicleCancelBtn.classList.remove('hidden');
+                    vehiclePlateInput.focus();
+                }),
+                createActionButton(
+                    vehicle.active ? 'Pasifleştir' : 'Aktifleştir',
+                    'btn-outline',
+                    () => toggleCatalogEntity(
+                        `/api/vehicles/${vehicle.id}`,
+                        { active: !vehicle.active }
+                    )
+                )
+            );
+            card.append(header, actions);
+            vehicleList.appendChild(card);
+        });
+    }
+
+    async function loadFleetCatalog() {
+        showListMessage(brandList, 'Yükleniyor...');
+        showListMessage(modelList, 'Yükleniyor...');
+        showListMessage(vehicleList, 'Yükleniyor...');
+        try {
+            const result = await apiRequest('/api/management/catalog');
+            fleetCatalog = {
+                brands: Array.from(result.brands || []),
+                models: Array.from(result.models || []),
+                vehicles: Array.from(result.vehicles || []),
+            };
+            populateFleetSelects();
+            renderBrandList();
+            renderModelList();
+            renderVehicleList();
+            await fetchPlatesAPI();
+        } catch (error) {
+            [brandList, modelList, vehicleList].forEach(container => {
+                showListMessage(container, error.message);
+            });
+        }
+    }
+
+    async function toggleCatalogEntity(url, payload) {
+        try {
+            const result = await apiRequest(url, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+            });
+            window.showToast(result.message, 'success');
+            await loadFleetCatalog();
+        } catch (error) {
+            window.showToast(error.message, 'error');
+        }
+    }
+
+    async function submitCatalogForm(form, url, payload, resetForm) {
+        const submitButton = form.querySelector('button[type="submit"]');
+        submitButton.disabled = true;
+        try {
+            const result = await apiRequest(url, {
+                method: payload.id ? 'PATCH' : 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload.data),
+            });
+            window.showToast(result.message, 'success');
+            resetForm();
+            await loadFleetCatalog();
+        } catch (error) {
+            window.showToast(error.message, 'error');
+        } finally {
+            submitButton.disabled = false;
+        }
+    }
+
+    function showFleetManagement() {
+        if (!state.isAdmin) {
+            window.showToast('Bu işlem için yönetici yetkisi gerekiyor.', 'error');
+            return;
+        }
+        hideAllSections();
+        fleetManagementSection.classList.remove('hidden');
+        fleetManagementSection.classList.add('active');
+        showFleetTab('brands');
+        resetBrandForm();
+        resetModelForm();
+        resetVehicleForm();
+        loadFleetCatalog();
+    }
+
+    function resetMovementTypeForm() {
+        movementTypeIdInput.value = '';
+        movementTypeNameInput.value = '';
+        movementTypeDescriptionInput.value = '';
+        movementTypeSortOrderInput.value = '0';
+        movementTypeActiveInput.checked = true;
+        movementTypeNameInput.disabled = false;
+        movementTypeActiveInput.disabled = false;
+        movementTypeCancelBtn.classList.add('hidden');
+    }
+
+    function renderMovementTypeList() {
+        movementTypeList.textContent = '';
+        if (movementTypesCache.length === 0) {
+            showListMessage(
+                movementTypeList,
+                'Henüz hareket türü tanımlanmamış.'
+            );
+            return;
+        }
+
+        movementTypesCache.forEach(item => {
+            const card = document.createElement('article');
+            card.className = 'management-item';
+            const header = document.createElement('div');
+            header.className = 'management-item-header';
+            const text = document.createElement('div');
+            const title = document.createElement('h3');
+            const description = document.createElement('p');
+            title.textContent = item.name;
+            description.textContent = item.description || 'Açıklama bulunmuyor.';
+            text.append(title, description);
+            header.append(text, createStatusBadge(item.active));
+
+            const details = document.createElement('div');
+            details.className = 'management-item-details';
+            const order = document.createElement('span');
+            const orderTitle = document.createElement('strong');
+            orderTitle.textContent = 'Sıra: ';
+            order.append(orderTitle, document.createTextNode(
+                String(item.sort_order)
+            ));
+            details.appendChild(order);
+
+            const actions = document.createElement('div');
+            actions.className = 'item-actions';
+            actions.appendChild(createActionButton(
+                'Düzenle',
+                'btn-secondary',
+                () => {
+                    movementTypeIdInput.value = String(item.id);
+                    movementTypeNameInput.value = item.name;
+                    movementTypeDescriptionInput.value =
+                        item.description || '';
+                    movementTypeSortOrderInput.value =
+                        String(item.sort_order);
+                    movementTypeActiveInput.checked = item.active;
+                    movementTypeNameInput.disabled = item.locked;
+                    movementTypeActiveInput.disabled = item.locked;
+                    movementTypeCancelBtn.classList.remove('hidden');
+                    movementTypeDescriptionInput.focus();
+                }
+            ));
+            if (!item.locked) {
+                actions.appendChild(createActionButton(
+                    item.active ? 'Pasifleştir' : 'Aktifleştir',
+                    'btn-outline',
+                    () => toggleMovementType(item)
+                ));
+            }
+            card.append(header, details, actions);
+            movementTypeList.appendChild(card);
+        });
+    }
+
+    async function loadMovementTypeManagement() {
+        showListMessage(movementTypeList, 'Yükleniyor...');
+        try {
+            const result = await apiRequest(
+                '/api/movement-types?include_inactive=1'
+            );
+            movementTypesCache = Array.from(result.movement_types || []);
+            renderMovementTypeList();
+            await loadMovementTypes();
+        } catch (error) {
+            showListMessage(movementTypeList, error.message);
+        }
+    }
+
+    async function toggleMovementType(item) {
+        try {
+            const result = await apiRequest(
+                `/api/movement-types/${item.id}`,
+                {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ active: !item.active }),
+                }
+            );
+            window.showToast(result.message, 'success');
+            await loadMovementTypeManagement();
+        } catch (error) {
+            window.showToast(error.message, 'error');
+        }
+    }
+
+    function showMovementTypeManagement() {
+        if (!state.isAdmin) {
+            window.showToast('Bu işlem için yönetici yetkisi gerekiyor.', 'error');
+            return;
+        }
+        hideAllSections();
+        movementTypeManagementSection.classList.remove('hidden');
+        movementTypeManagementSection.classList.add('active');
+        resetMovementTypeForm();
+        loadMovementTypeManagement();
+    }
+
     // ---- DASHBOARD / İŞLEM (KAMERA) AKIŞI ----
     pickupBtn.addEventListener('click', () => startProcess('Araç Alma', 'pickup'));
     dropoffBtn.addEventListener('click', () => startProcess('Teslim Etme', 'dropoff'));
+    activeVehiclesBtn.addEventListener('click', showActiveVehicles);
+    backFromActiveVehiclesBtn.addEventListener('click', showActionSelection);
+    refreshActiveTripsBtn.addEventListener('click', loadActiveTrips);
+    activeTripSearch.addEventListener('input', renderActiveTrips);
+    fleetManagementBtn.addEventListener('click', showFleetManagement);
+    movementTypeManagementBtn.addEventListener(
+        'click',
+        showMovementTypeManagement
+    );
+    backFromFleetManagementBtn.addEventListener(
+        'click',
+        () => reportMenuBtn.click()
+    );
+    backFromMovementTypeManagementBtn.addEventListener(
+        'click',
+        () => reportMenuBtn.click()
+    );
+    fleetTabs.forEach(tab => {
+        tab.addEventListener(
+            'click',
+            () => showFleetTab(tab.dataset.fleetTab)
+        );
+    });
+    brandCancelBtn.addEventListener('click', resetBrandForm);
+    modelCancelBtn.addEventListener('click', resetModelForm);
+    vehicleCancelBtn.addEventListener('click', resetVehicleForm);
+    movementTypeCancelBtn.addEventListener(
+        'click',
+        resetMovementTypeForm
+    );
+    brandForm.addEventListener('submit', event => {
+        event.preventDefault();
+        const id = brandIdInput.value;
+        submitCatalogForm(
+            brandForm,
+            id ? `/api/brands/${id}` : '/api/brands',
+            {
+                id,
+                data: {
+                    name: brandNameInput.value,
+                    active: brandActiveInput.checked,
+                },
+            },
+            resetBrandForm
+        );
+    });
+    modelForm.addEventListener('submit', event => {
+        event.preventDefault();
+        const id = modelIdInput.value;
+        submitCatalogForm(
+            modelForm,
+            id ? `/api/models/${id}` : '/api/models',
+            {
+                id,
+                data: {
+                    brand_id: Number(modelBrandSelect.value),
+                    name: modelNameInput.value,
+                    active: modelActiveInput.checked,
+                },
+            },
+            resetModelForm
+        );
+    });
+    vehicleForm.addEventListener('submit', event => {
+        event.preventDefault();
+        const id = vehicleIdInput.value;
+        submitCatalogForm(
+            vehicleForm,
+            id ? `/api/vehicles/${id}` : '/api/vehicles',
+            {
+                id,
+                data: {
+                    plate: vehiclePlateInput.value,
+                    model_id: Number(vehicleModelSelect.value),
+                    year: vehicleYearInput.value,
+                    active: vehicleActiveInput.checked,
+                },
+            },
+            resetVehicleForm
+        );
+    });
+    movementTypeForm.addEventListener('submit', async event => {
+        event.preventDefault();
+        const id = movementTypeIdInput.value;
+        const submitButton = movementTypeForm.querySelector(
+            'button[type="submit"]'
+        );
+        submitButton.disabled = true;
+        try {
+            const result = await apiRequest(
+                id ? `/api/movement-types/${id}` : '/api/movement-types',
+                {
+                    method: id ? 'PATCH' : 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        name: movementTypeNameInput.value,
+                        description: movementTypeDescriptionInput.value,
+                        sort_order: movementTypeSortOrderInput.value,
+                        active: movementTypeActiveInput.checked,
+                    }),
+                }
+            );
+            window.showToast(result.message, 'success');
+            resetMovementTypeForm();
+            await loadMovementTypeManagement();
+        } catch (error) {
+            window.showToast(error.message, 'error');
+        } finally {
+            submitButton.disabled = false;
+        }
+    });
     backToActionsBtn.addEventListener('click', showActionSelection);
     actionLogoutBtn.addEventListener('click', logout);
 
 
-    function startProcess(title, actionTypeStr) {
+    function startProcess(
+        title,
+        actionTypeStr,
+        preselectedPlate = null,
+        preselectedActionType = null
+    ) {
         state.currentAction = actionTypeStr;
         state.currentStep = 1;
         state.plate = null;
@@ -223,7 +1088,17 @@ document.addEventListener('DOMContentLoaded', () => {
         state.requestNo = null;
         state.serviceFormNo = null;
         state.notes = null;
-        actionTypeSelect.value = 'Diğer';
+        actionTypeSelect.value = (
+            Array.from(actionTypeSelect.options).some(option => (
+                option.value === preselectedActionType
+            ))
+                ? preselectedActionType
+                : Array.from(actionTypeSelect.options).some(
+                    option => option.value === 'Diğer'
+                )
+                    ? 'Diğer'
+                    : actionTypeSelect.options[0]?.value || ''
+        );
         mileageInput.value = '';
         requestNoInput.value = '';
         serviceFormNoInput.value = '';
@@ -242,9 +1117,31 @@ document.addEventListener('DOMContentLoaded', () => {
             triggerOcrBtn.disabled = true;
         }
 
-        const platesPromise = loadPlatesForDashboard().finally(() => {
-            isPlateListReady = true;
-        });
+        const platesPromise = loadPlatesForDashboard()
+            .then(() => {
+                const parsedPlate = parseTurkishPlate(
+                    String(preselectedPlate || ''),
+                    { allowOcrCorrections: false }
+                );
+                if (!parsedPlate) return;
+                let option = Array.from(plateSelect.options).find(
+                    candidate => candidate.value === parsedPlate.normalized
+                );
+                if (!option) {
+                    option = document.createElement('option');
+                    option.value = parsedPlate.normalized;
+                    option.dataset.plate = parsedPlate.normalized;
+                    option.dataset.ocrTemporary = 'true';
+                    option.textContent =
+                        `${formatPlateForDisplay(parsedPlate.normalized)} (devam eden kullanım)`;
+                    plateSelect.appendChild(option);
+                }
+                plateSelect.value = parsedPlate.normalized;
+                plateSelect.dispatchEvent(new Event('change'));
+            })
+            .finally(() => {
+                isPlateListReady = true;
+            });
         renderStep();
         
         const cameraPromise = window.cameraController
@@ -2233,6 +3130,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 
                 if (response.ok && result.success) {
                     window.showToast(result.message, 'success');
+                    activeTripsCache = [];
                     mileageInput.value = '';
                     requestNoInput.value = '';
                     serviceFormNoInput.value = '';
@@ -2267,6 +3165,7 @@ document.addEventListener('DOMContentLoaded', () => {
         hideAllSections();
         reportsMenuSection.classList.remove('hidden');
         reportsMenuSection.classList.add('active');
+        loadDatabaseStatus();
     });
 
     backFromReportsMenuBtn.addEventListener('click', showActionSelection);
@@ -2333,6 +3232,7 @@ document.addEventListener('DOMContentLoaded', () => {
             
             if (response.ok && result.success) {
                 currentRecords = result.records; // Veriyi kaydet
+                await loadMovementTypes();
                 applyFiltersAndSort(); // Tabloyu render et
             } else {
                 reportTableBody.innerHTML =
@@ -2526,6 +3426,19 @@ document.addEventListener('DOMContentLoaded', () => {
             return true;
         }
 
+        if (
+            fleetManagementSection.classList.contains('active')
+            || movementTypeManagementSection.classList.contains('active')
+        ) {
+            reportMenuBtn.click();
+            return true;
+        }
+
+        if (activeVehiclesSection.classList.contains('active')) {
+            showActionSelection();
+            return true;
+        }
+
         if (reportsMenuSection.classList.contains('active')) {
             showActionSelection();
             return true;
@@ -2544,6 +3457,7 @@ document.addEventListener('DOMContentLoaded', () => {
         hideAllSections();
         state = {
             username: null,
+            isAdmin: false,
             currentAction: null,
             currentStep: 1,
             plate: null,
@@ -2553,6 +3467,7 @@ document.addEventListener('DOMContentLoaded', () => {
             serviceFormNo: null,
             notes: null,
         };
+        updateAdminVisibility();
         document.getElementById('login-form').reset();
         
         loginSection.classList.remove('hidden');
