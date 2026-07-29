@@ -1,6 +1,7 @@
 const assert = require('node:assert/strict');
 const {
     parseTurkishPlate,
+    resolvePlateForForm,
     matchRegisteredPlate,
     mapOverlayToVideoSource,
     buildVerticalScanCrops,
@@ -121,6 +122,17 @@ assert.deepEqual(
     { normalized: '34KM4969', corrected: true }
 );
 assert.equal(matchRegisteredPlate('34ABC123', ['34EZS794', '34KM4969']), null);
+
+assert.deepEqual(
+    resolvePlateForForm('02 ABG 585', ['34EZS794', '34KM4969']),
+    { normalized: '02ABG585', registered: false }
+);
+assert.deepEqual(
+    resolvePlateForForm('34 KM 4969', ['34EZS794', '34KM4969']),
+    { normalized: '34KM4969', registered: true }
+);
+assert.equal(resolvePlateForForm('34 E2S 794', ['34EZS794', '34KM4969']), null);
+assert.equal(resolvePlateForForm('geçersiz', ['34KM4969']), null);
 
 assert.deepEqual(
     buildVerticalScanCrops(

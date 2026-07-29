@@ -1,4 +1,4 @@
-const CACHE_NAME = 'plaka-sistemi-v8-multiscan';
+const CACHE_NAME = 'plaka-sistemi-v9-ocr-confirm';
 const CORE_ASSETS = [
   '/',
   '/static/css/style.css',

@@ -90,6 +90,23 @@
         return null;
     }
 
+    function resolvePlateForForm(value, registeredPlates) {
+        const parsed = parseTurkishPlate(value);
+        if (!parsed) {
+            return null;
+        }
+
+        const exactRegisteredPlate = Array.from(registeredPlates || [])
+            .map(plate => parseTurkishPlate(String(plate)))
+            .filter(Boolean)
+            .find(plate => plate.normalized === parsed.normalized);
+
+        return {
+            normalized: exactRegisteredPlate?.normalized || parsed.normalized,
+            registered: Boolean(exactRegisteredPlate),
+        };
+    }
+
     function charactersAreOcrEquivalent(left, right) {
         if (left === right) {
             return true;
@@ -283,6 +300,7 @@
 
     return {
         parseTurkishPlate,
+        resolvePlateForForm,
         matchRegisteredPlate,
         mapOverlayToVideoSource,
         buildVerticalScanCrops,

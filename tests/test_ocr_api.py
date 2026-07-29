@@ -147,6 +147,29 @@ class OcrApiTests(unittest.TestCase):
         self.assertEqual(response.status_code, 422)
         self.assertTrue(response.get_json()["fallback_available"])
 
+    def test_unregistered_ocr_plate_can_continue_to_record_flow(self):
+        plate = "02ABG585"
+        app_module.ACTIVE_TRIPS.pop(plate, None)
+
+        try:
+            response = self.client.post(
+                "/api/record",
+                json={
+                    "plate": plate,
+                    "action": "pickup",
+                    "action_type": "Diğer",
+                    "mileage": "100",
+                    "user": "admin",
+                    "notes": "",
+                },
+            )
+
+            self.assertEqual(response.status_code, 201)
+            self.assertTrue(response.get_json()["success"])
+            self.assertIn(plate, app_module.ACTIVE_TRIPS)
+        finally:
+            app_module.ACTIVE_TRIPS.pop(plate, None)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -7,6 +7,7 @@
 document.addEventListener('DOMContentLoaded', () => {
     const {
         parseTurkishPlate,
+        resolvePlateForForm,
         matchRegisteredPlate,
         mapOverlayToVideoSource,
         buildVerticalScanCrops
@@ -260,8 +261,14 @@ document.addEventListener('DOMContentLoaded', () => {
     let currentOcrPlate = null;
     let currentOcrSource = null;
 
+    function getRegisteredPlateOptions() {
+        return Array.from(plateSelect.options).filter(
+            option => option.value && option.dataset.ocrTemporary !== 'true'
+        );
+    }
+
     function findRegisteredPlateOption(plateText) {
-        const options = Array.from(plateSelect.options).filter(option => option.value);
+        const options = getRegisteredPlateOptions();
         const match = matchRegisteredPlate(
             plateText,
             options.map(option => option.dataset.plate || option.value)
@@ -274,9 +281,54 @@ document.addEventListener('DOMContentLoaded', () => {
         }) || null;
     }
 
-    function checkPlateInDb(plateText) {
-        const opt = findRegisteredPlateOption(plateText);
-        return opt ? opt.value : null;
+    function resolveOcrPlate(plateText) {
+        const registeredOptions = getRegisteredPlateOptions();
+        const resolvedPlate = resolvePlateForForm(
+            plateText,
+            registeredOptions.map(option => option.dataset.plate || option.value)
+        );
+        if (!resolvedPlate) {
+            return null;
+        }
+
+        // Kullanıcının elle girdiği geçerli fakat benzer bir plakayı fuzzy
+        // eşleştirmeyle yanlış kayıtlı araca çevirmemek için burada yalnız
+        // birebir normalleştirilmiş eşleşme kullanılır.
+        const registeredOption = resolvedPlate.registered
+            ? registeredOptions.find(option => (
+                parseTurkishPlate(option.dataset.plate || option.value)?.normalized
+                === resolvedPlate.normalized
+            )) || null
+            : null;
+
+        return { ...resolvedPlate, option: registeredOption };
+    }
+
+    function ensureOcrPlateOption(resolvedPlate) {
+        if (resolvedPlate.option) {
+            return resolvedPlate.option;
+        }
+
+        const existingOption = Array.from(plateSelect.options).find(option => {
+            if (!option.value) return false;
+            return parseTurkishPlate(option.dataset.plate || option.value)?.normalized
+                === resolvedPlate.normalized;
+        });
+        if (existingOption) {
+            return existingOption;
+        }
+
+        plateSelect
+            .querySelectorAll('option[data-ocr-temporary="true"]')
+            .forEach(option => option.remove());
+
+        const option = document.createElement('option');
+        option.value = resolvedPlate.normalized;
+        option.dataset.plate = resolvedPlate.normalized;
+        option.dataset.ocrTemporary = 'true';
+        option.textContent = `${resolvedPlate.normalized} (OCR ile okundu)`;
+        plateSelect.appendChild(option);
+        return option;
     }
 
 
@@ -391,8 +443,7 @@ document.addEventListener('DOMContentLoaded', () => {
     async function requestLocalOcr(cropCaptures, sessionId) {
         triggerOcrBtn.textContent = '⏳ Yerel OCR hazırlanıyor...';
         const worker = await ensureOcrWorker();
-        const registeredPlates = Array.from(plateSelect.options)
-            .filter(option => option.value)
+        const registeredPlates = getRegisteredPlateOptions()
             .map(option => option.dataset.plate || option.value);
         const candidates = [];
         const stages = [
@@ -497,8 +548,8 @@ document.addEventListener('DOMContentLoaded', () => {
         } else {
             ocrDbStatus.textContent = '⚠️ Okundu • Araç Kayıtlı Değil';
             ocrDbStatus.style.color = '#facc15';
-            ocrConfirmBtn.disabled = true;
-            ocrConfirmBtn.style.opacity = '0.5';
+            ocrConfirmBtn.disabled = false;
+            ocrConfirmBtn.style.opacity = '1';
         }
 
         ocrManualEditContainer.classList.add('hidden');
@@ -614,16 +665,24 @@ document.addEventListener('DOMContentLoaded', () => {
     if (ocrConfirmBtn) {
         ocrConfirmBtn.addEventListener('click', () => {
             const rawValue = ocrManualEditContainer.classList.contains('hidden') ? currentOcrPlate : ocrManualInput.value;
-            const registeredValue = checkPlateInDb(rawValue);
-            
-            if (registeredValue) {
-                plateSelect.value = registeredValue;
-                processBtn.disabled = false;
-                closeCameraSafely();
-                window.showToast(`Plaka Onaylandı: ${registeredValue}`, 'success');
-            } else {
-                window.showToast('Girilen plaka sistemde kayıtlı değil!', 'error');
+            const resolvedPlate = resolveOcrPlate(rawValue);
+
+            if (!resolvedPlate) {
+                window.showToast('Geçerli bir Türk plakası girin.', 'error');
+                return;
             }
+
+            const option = ensureOcrPlateOption(resolvedPlate);
+            option.selected = true;
+            plateSelect.value = option.value;
+            plateSelect.dispatchEvent(new Event('change', { bubbles: true }));
+            closeCameraSafely();
+
+            const registrationNote = resolvedPlate.registered ? '' : ' (kayıt dışı araç)';
+            window.showToast(
+                `Plaka forma aktarıldı: ${resolvedPlate.normalized}${registrationNote}`,
+                'success'
+            );
         });
     }
 
@@ -648,14 +707,20 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function validateManualInput() {
-        const val = ocrManualInput.value;
-        const registeredValue = checkPlateInDb(val);
-        if (registeredValue) {
-            ocrConfirmBtn.disabled = false;
-            ocrConfirmBtn.style.opacity = "1";
+        const resolvedPlate = resolveOcrPlate(ocrManualInput.value);
+        const isValidPlate = Boolean(resolvedPlate);
+        ocrConfirmBtn.disabled = !isValidPlate;
+        ocrConfirmBtn.style.opacity = isValidPlate ? '1' : '0.5';
+
+        if (!resolvedPlate) {
+            ocrDbStatus.textContent = '❌ Geçersiz Plaka';
+            ocrDbStatus.style.color = '#ef4444';
+        } else if (resolvedPlate.registered) {
+            ocrDbStatus.textContent = '✅ Sistemde Bulundu';
+            ocrDbStatus.style.color = '#4ade80';
         } else {
-            ocrConfirmBtn.disabled = true;
-            ocrConfirmBtn.style.opacity = "0.5";
+            ocrDbStatus.textContent = '⚠️ Geçerli • Araç Kayıtlı Değil';
+            ocrDbStatus.style.color = '#facc15';
         }
     }
 
@@ -722,7 +787,7 @@ document.addEventListener('DOMContentLoaded', () => {
             cameraOverlayText.textContent = 'Plakayı okutun';
             
             manualTitle.textContent = 'Araç ve İşlem Seçimi';
-            manualSubtitle.textContent = 'Kayıtlı plakayı ve hareket tipini seçin.';
+            manualSubtitle.textContent = 'Plakayı okutun veya kayıtlı listeden seçin.';
             
             stepPlateContainer.classList.remove('hidden');
             stepMileageContainer.classList.add('hidden');
