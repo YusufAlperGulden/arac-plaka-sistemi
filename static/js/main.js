@@ -234,9 +234,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const clearAdvancedFiltersBtn = document.getElementById(
         'clear-advanced-filters-btn'
     );
-    const exportCsvBtn = document.getElementById('export-csv-btn');
-    const exportXlsxBtn = document.getElementById('export-xlsx-btn');
-    const exportPdfBtn = document.getElementById('export-pdf-btn');
+    
     
     // ---- DASHBOARD (İŞLEM) EKRANI UI ELEMENTLERİ ----
     const dashboardTitle = document.getElementById('dashboard-title');
@@ -244,7 +242,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const step1Dot = document.getElementById('step-1-dot');
     const step2Dot = document.getElementById('step-2-dot');
     const instructionText = document.getElementById('instruction-text');
-    
     const cameraOverlayText = document.getElementById('camera-overlay-text');
     const plateDetectionBox = document.getElementById('plate-detection-box');
     const plateDetectionLabel = document.getElementById('plate-detection-label');
@@ -4395,12 +4392,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         fetchAdvancedReport();
     });
-    exportCsvBtn.addEventListener('click', () => exportAdvancedReport('csv'));
-    exportXlsxBtn.addEventListener(
-        'click',
-        () => exportAdvancedReport('xlsx')
-    );
-    exportPdfBtn.addEventListener('click', () => exportAdvancedReport('pdf'));
 
     function populateReportDriverFilter(selectedValue = '') {
         const items = driversCache
@@ -4566,29 +4557,6 @@ document.addEventListener('DOMContentLoaded', () => {
             `/api/reports/advanced${query ? `?${query}` : ''}`,
             { resetFilters: false }
         );
-    }
-
-    function exportAdvancedReport(format) {
-        let params;
-        try {
-            params = buildAdvancedReportParams(format);
-        } catch (error) {
-            window.showToast(error.message, 'error');
-            return;
-        }
-
-        const exportUrl = `/api/reports/export?${params.toString()}`;
-        
-        // Open the download URL in a hidden iframe or same window
-        // The server sends Content-Disposition: attachment, so it won't replace the page
-        const link = document.createElement('a');
-        link.href = exportUrl;
-        link.target = '_blank';
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        
-        window.showToast('Rapor indiriliyor...', 'success');
     }
 
     async function fetchAndShowReport(
