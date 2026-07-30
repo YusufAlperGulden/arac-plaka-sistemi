@@ -774,7 +774,7 @@ button {
 }
 
 .report-search-field {
-    grid-column: span 2;
+    /* grid-column: span 2; */
 }
 
 .checkbox-grid {
