@@ -2138,7 +2138,14 @@ document.addEventListener('DOMContentLoaded', () => {
             submitButton.disabled = false;
         }
     });
-    backToActionsBtn.addEventListener('click', showActionSelection);
+    backToActionsBtn.addEventListener('click', () => {
+        if (state.currentStep === 2) {
+            state.currentStep = 1;
+            updateUIForStep();
+        } else {
+            showActionSelection();
+        }
+    });
     actionLogoutBtn.addEventListener('click', logout);
 
 
