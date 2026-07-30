@@ -179,6 +179,10 @@ body {
     gap: 20px;
 }
 
+#action-selection-section .action-buttons-grid {
+    grid-template-columns: repeat(3, 1fr);
+}
+
 .wide-action-btn {
     grid-column: 1 / -1;
 }
@@ -1043,6 +1047,9 @@ button {
         font-size: 0.9rem;
     }
     .action-buttons-grid {
+        grid-template-columns: 1fr;
+    }
+    #action-selection-section .action-buttons-grid {
         grid-template-columns: 1fr;
     }
     .wide-action-btn {
