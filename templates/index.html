@@ -579,23 +579,22 @@
                         <label for="global-search">Metin Arama</label>
                         <input type="search" id="global-search" placeholder="Plaka, araç, sürücü, talep, servis veya not ara...">
                     </div>
-                    <div class="filter-actions-row" style="grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 15px; margin-top: 5px;">
-                        <div class="input-group compact-input" style="margin-bottom: 0; min-width: 200px;">
-                            <label for="sort-by">Sırala</label>
-                            <select id="sort-by">
-                                <option value="date-desc">Ekleme Tarihi (En Yeni)</option>
-                                <option value="date-asc">Ekleme Tarihi (En Eski)</option>
-                                <option value="distance-desc">Yapılan Mesafe (En Çok)</option>
-                                <option value="distance-asc">Yapılan Mesafe (En Az)</option>
-                                <option value="plate-asc">Plaka (A-Z)</option>
-                                <option value="plate-desc">Plaka (Z-A)</option>
-                                <option value="driver-asc">Sürücü Adı (A-Z)</option>
-                                <option value="driver-desc">Sürücü Adı (Z-A)</option>
-                            </select>
-                        </div>
-                        <div class="report-filter-actions" style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
-                            <button id="clear-advanced-filters-btn" class="btn-secondary btn-sm" type="button">Filtreleri Temizle</button>
-                        </div>
+                    <div class="input-group compact-input">
+                        <label for="sort-by">Sırala</label>
+                        <select id="sort-by">
+                            <option value="date-desc">Ekleme Tarihi (En Yeni)</option>
+                            <option value="date-asc">Ekleme Tarihi (En Eski)</option>
+                            <option value="distance-desc">Yapılan Mesafe (En Çok)</option>
+                            <option value="distance-asc">Yapılan Mesafe (En Az)</option>
+                            <option value="plate-asc">Plaka (A-Z)</option>
+                            <option value="plate-desc">Plaka (Z-A)</option>
+                            <option value="driver-asc">Sürücü Adı (A-Z)</option>
+                            <option value="driver-desc">Sürücü Adı (Z-A)</option>
+                        </select>
+                    </div>
+                    <div class="input-group compact-input">
+                        <label>&nbsp;</label>
+                        <button id="clear-advanced-filters-btn" class="btn-secondary" type="button" style="width: 100%; margin: 0; min-height: 36px;">Filtreleri Temizle</button>
                     </div>
                 </div>
             </div>

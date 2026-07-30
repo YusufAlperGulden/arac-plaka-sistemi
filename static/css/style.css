@@ -769,9 +769,12 @@ button {
     gap: 0 14px;
 }
 
-.form-grid-wide,
-.report-search-field {
+.form-grid-wide {
     grid-column: 1 / -1;
+}
+
+.report-search-field {
+    grid-column: span 2;
 }
 
 .checkbox-grid {
