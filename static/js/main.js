@@ -61,7 +61,6 @@ document.addEventListener('DOMContentLoaded', () => {
     // ---- RAPORLAR MENÜSÜ BUTONLARI ----
     const reportRecentBtn = document.getElementById('report-recent-btn');
     const reportVehicleBtn = document.getElementById('report-vehicle-btn');
-    const reportAdvancedBtn = document.getElementById('report-advanced-btn');
     const fleetManagementBtn = document.getElementById('fleet-management-btn');
     const movementTypeManagementBtn = document.getElementById(
         'movement-type-management-btn'
@@ -159,6 +158,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const vehicleActiveInput = document.getElementById('vehicle-active');
     const vehicleCancelBtn = document.getElementById('vehicle-cancel-btn');
     const vehicleList = document.getElementById('vehicle-list');
+    const vehicleRegistrationReturnNote = document.getElementById(
+        'vehicle-registration-return-note'
+    );
 
     // ---- HAREKET TÜRLERİ YÖNETİMİ ----
     const backFromMovementTypeManagementBtn = document.getElementById(
@@ -251,6 +253,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const manualSubtitle = document.getElementById('manual-subtitle');
     
     const plateSelect = document.getElementById('plate-select');
+    const addNewPlateBtn = document.getElementById('add-new-plate-btn');
     const selectedVehicleInfo = document.getElementById('selected-vehicle-info');
     const actionTypeSelect = document.getElementById('action-type-select');
     const driverSelect = document.getElementById('driver-select');
@@ -289,6 +292,7 @@ document.addEventListener('DOMContentLoaded', () => {
         vehicles: [],
     };
     let movementTypesCache = [];
+    let fleetReturnContext = null;
 
     function formatPlateForDisplay(value) {
         const parsed = parseTurkishPlate(
@@ -1218,7 +1222,17 @@ document.addEventListener('DOMContentLoaded', () => {
             labelKey: 'display_name',
         });
 
-        const modelItems = fleetCatalog.models.map(model => ({
+        const activeBrandIds = new Set(
+            fleetCatalog.brands
+                .filter(brand => brand.active)
+                .map(brand => brand.id)
+        );
+        const selectableModels = fleetReturnContext
+            ? fleetCatalog.models.filter(model => (
+                model.active && activeBrandIds.has(model.brand_id)
+            ))
+            : fleetCatalog.models;
+        const modelItems = selectableModels.map(model => ({
             ...model,
             display_name: model.active
                 ? model.display_label
@@ -1426,26 +1440,112 @@ document.addEventListener('DOMContentLoaded', () => {
             window.showToast(result.message, 'success');
             resetForm();
             await loadFleetCatalog();
+            return result;
         } catch (error) {
             window.showToast(error.message, 'error');
+            return null;
         } finally {
             submitButton.disabled = false;
         }
     }
 
-    function showFleetManagement() {
+    function showFleetManagement({
+        initialTab = 'brands',
+        preserveReturnContext = false,
+        prefillPlate = '',
+    } = {}) {
         if (!state.isAdmin) {
             window.showToast('Bu işlem için yönetici yetkisi gerekiyor.', 'error');
             return;
         }
+        if (!preserveReturnContext) {
+            fleetReturnContext = null;
+        }
         hideAllSections();
         fleetManagementSection.classList.remove('hidden');
         fleetManagementSection.classList.add('active');
-        showFleetTab('brands');
+        showFleetTab(initialTab);
         resetBrandForm();
         resetModelForm();
         resetVehicleForm();
-        loadFleetCatalog();
+        vehicleActiveInput.checked = true;
+        vehicleActiveInput.disabled = Boolean(fleetReturnContext);
+        backFromFleetManagementBtn.textContent = fleetReturnContext
+            ? '← İşleme Dön'
+            : '⬅ Geri';
+        vehicleRegistrationReturnNote.classList.toggle(
+            'hidden',
+            !fleetReturnContext
+        );
+        const catalogPromise = loadFleetCatalog();
+        if (initialTab === 'vehicles') {
+            const parsedPlate = parseTurkishPlate(
+                String(prefillPlate || ''),
+                { allowOcrCorrections: false }
+            );
+            if (parsedPlate) {
+                vehiclePlateInput.value = formatPlateForDisplay(
+                    parsedPlate.normalized
+                );
+            }
+            catalogPromise.finally(() => vehiclePlateInput.focus());
+        }
+        return catalogPromise;
+    }
+
+    function captureFleetReturnContext() {
+        return {
+            title: dashboardTitle.textContent,
+            currentAction: state.currentAction,
+            plate: plateSelect.value || '',
+            actionType: actionTypeSelect.value || '',
+            driverId: driverSelect.value || null,
+        };
+    }
+
+    function returnToProcessFromFleet(preselectedPlate = null) {
+        const savedContext = fleetReturnContext;
+        if (!savedContext) {
+            reportMenuBtn.click();
+            return;
+        }
+
+        fleetReturnContext = null;
+        vehicleActiveInput.disabled = false;
+        backFromFleetManagementBtn.textContent = '⬅ Geri';
+        vehicleRegistrationReturnNote.classList.add('hidden');
+        startProcess(
+            savedContext.title,
+            savedContext.currentAction,
+            preselectedPlate || savedContext.plate,
+            savedContext.actionType,
+            savedContext.driverId
+        ).then(() => plateSelect.focus());
+    }
+
+    function openNewPlateShortcut() {
+        if (!state.isAdmin) {
+            window.showToast(
+                'Yeni araç kaydı için yönetici yetkisi gerekiyor.',
+                'error'
+            );
+            return;
+        }
+
+        fleetReturnContext = captureFleetReturnContext();
+        const selectedOption = plateSelect.selectedOptions[0];
+        const temporaryPlate = selectedOption?.dataset.ocrTemporary === 'true'
+            ? selectedOption.value
+            : '';
+        showFleetManagement({
+            initialTab: 'vehicles',
+            preserveReturnContext: true,
+            prefillPlate: temporaryPlate,
+        });
+        window.showToast(
+            'Yeni aracı kaydedin; ardından bu işleme otomatik döneceksiniz.',
+            'success'
+        );
     }
 
     function resetMovementTypeForm() {
@@ -1612,7 +1712,11 @@ document.addEventListener('DOMContentLoaded', () => {
         'change',
         renderMaintenanceReminderList
     );
-    fleetManagementBtn.addEventListener('click', showFleetManagement);
+    fleetManagementBtn.addEventListener(
+        'click',
+        () => showFleetManagement()
+    );
+    addNewPlateBtn.addEventListener('click', openNewPlateShortcut);
     movementTypeManagementBtn.addEventListener(
         'click',
         showMovementTypeManagement
@@ -1620,7 +1724,7 @@ document.addEventListener('DOMContentLoaded', () => {
     driverManagementBtn.addEventListener('click', showDriverManagement);
     backFromFleetManagementBtn.addEventListener(
         'click',
-        () => reportMenuBtn.click()
+        () => returnToProcessFromFleet()
     );
     backFromMovementTypeManagementBtn.addEventListener(
         'click',
@@ -1681,10 +1785,10 @@ document.addEventListener('DOMContentLoaded', () => {
             resetModelForm
         );
     });
-    vehicleForm.addEventListener('submit', event => {
+    vehicleForm.addEventListener('submit', async event => {
         event.preventDefault();
         const id = vehicleIdInput.value;
-        submitCatalogForm(
+        const result = await submitCatalogForm(
             vehicleForm,
             id ? `/api/vehicles/${id}` : '/api/vehicles',
             {
@@ -1701,6 +1805,24 @@ document.addEventListener('DOMContentLoaded', () => {
             },
             resetVehicleForm
         );
+        if (
+            !id
+            && fleetReturnContext
+            && result?.vehicle?.active
+        ) {
+            returnToProcessFromFleet(result.vehicle.plate);
+        } else if (
+            !id
+            && fleetReturnContext
+            && result?.vehicle
+            && !result.vehicle.active
+        ) {
+            fleetReturnContext.plate = result.vehicle.plate;
+            window.showToast(
+                'Pasif araç işlem listesine eklenmez. Aracı aktifleştirip işleme dönün.',
+                'error'
+            );
+        }
     });
     driverForm.addEventListener('submit', async event => {
         event.preventDefault();
@@ -1893,7 +2015,7 @@ document.addEventListener('DOMContentLoaded', () => {
             ? window.cameraController.startCamera()
             : Promise.reject(new Error('Kamera denetleyicisi bulunamadı.'));
 
-        Promise.allSettled([
+        return Promise.allSettled([
             platesPromise,
             driversPromise,
             cameraPromise,
@@ -4572,9 +4694,13 @@ document.addEventListener('DOMContentLoaded', () => {
             return true;
         }
 
+        if (fleetManagementSection.classList.contains('active')) {
+            backFromFleetManagementBtn.click();
+            return true;
+        }
+
         if (
-            fleetManagementSection.classList.contains('active')
-            || movementTypeManagementSection.classList.contains('active')
+            movementTypeManagementSection.classList.contains('active')
             || driverManagementSection.classList.contains('active')
         ) {
             reportMenuBtn.click();
@@ -4605,6 +4731,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Çıkış Yapma
     function logout() {
         hideAllSections();
+        fleetReturnContext = null;
         state = {
             username: null,
             isAdmin: false,

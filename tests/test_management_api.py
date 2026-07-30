@@ -118,6 +118,22 @@ class ManagementApiTests(unittest.TestCase):
         self.assertEqual(regular_response.status_code, 200)
         self.assertFalse(regular_response.get_json()["is_admin"])
 
+    def test_operation_form_exposes_admin_vehicle_registration_shortcut(self):
+        response = self.client.get("/")
+
+        self.assertEqual(response.status_code, 200)
+        html = response.get_data(as_text=True)
+        self.assertIn('id="add-new-plate-btn"', html)
+        self.assertIn(
+            'class="btn-outline admin-only plate-shortcut-btn"',
+            html,
+        )
+        self.assertIn('id="vehicle-registration-return-note"', html)
+        self.assertIn(
+            "Yeni aracı kaydedip bu işleme otomatik dönün.",
+            html,
+        )
+
     def test_management_permissions_distinguish_anonymous_regular_and_admin(self):
         for path in (
             "/api/brands",

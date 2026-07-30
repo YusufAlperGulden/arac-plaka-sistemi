@@ -80,13 +80,13 @@
                     <p>Aracı müşteriye teslim et</p>
                 </button>
 
-                <button id="active-vehicles-btn" class="action-big-btn glass-panel wide-action-btn">
+                <button id="active-vehicles-btn" class="action-big-btn glass-panel">
                     <div class="action-icon">🚙</div>
                     <h3>Devam Eden Kullanımlar</h3>
                     <p>Şu anda kullanımda olan araçları görüntüle</p>
                 </button>
 
-                <button id="maintenance-reminders-btn" class="action-big-btn glass-panel wide-action-btn">
+                <button id="maintenance-reminders-btn" class="action-big-btn glass-panel">
                     <div class="action-icon">🔧</div>
                     <h3>Bakım ve Uyarılar</h3>
                     <p>Yaklaşan ve geciken araç işlemlerini görüntüle</p>
@@ -123,12 +123,6 @@
                     <div class="action-icon">🚗</div>
                     <h3>Araç Bazlı Hareket Raporu</h3>
                     <p>Plakaya göre geçmiş hareketler</p>
-                </button>
-
-                <button id="report-advanced-btn" class="action-big-btn glass-panel">
-                    <div class="action-icon">🔎</div>
-                    <h3>Gelişmiş Hareket Raporu</h3>
-                    <p>Tarih, sürücü ve araç bilgilerine göre filtrele</p>
                 </button>
 
                 <button id="fleet-management-btn" class="action-big-btn glass-panel admin-only">
@@ -338,6 +332,12 @@
             </div>
 
             <div id="fleet-vehicles-panel" class="management-panel hidden">
+                <div id="vehicle-registration-return-note"
+                     class="shortcut-context-note hidden"
+                     role="status">
+                    <strong>Yeni araç kaydı</strong>
+                    <span>Aracı kaydedince önceki işleme dönülecek ve yeni plaka otomatik seçilecek.</span>
+                </div>
                 <form id="vehicle-form" class="management-form glass-panel">
                     <input id="vehicle-id" type="hidden">
                     <div class="input-group">
@@ -691,6 +691,15 @@
                             <option value="" disabled selected>Plaka Seçin...</option>
                             <!-- Seçenekler JS ile dinamik olarak backend'den doldurulacak -->
                         </select>
+                        <button id="add-new-plate-btn"
+                                class="btn-outline admin-only plate-shortcut-btn"
+                                type="button"
+                                aria-describedby="add-new-plate-help">
+                            ➕ Yeni Plaka Ekle
+                        </button>
+                        <p id="add-new-plate-help" class="plate-shortcut-help admin-only">
+                            Yeni aracı kaydedip bu işleme otomatik dönün.
+                        </p>
                         <p id="selected-vehicle-info" class="subtitle hidden" aria-live="polite" style="margin: 10px 0 0;"></p>
 
                         <label for="action-type-select" style="margin-top: 15px;">Kullanım Amacı</label>
