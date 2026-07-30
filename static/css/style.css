@@ -104,7 +104,9 @@ body {
 #report-detail-section,
 #active-vehicles-section,
 #fleet-management-section,
-#movement-type-management-section {
+#movement-type-management-section,
+#driver-management-section,
+#maintenance-reminders-section {
     flex-direction: column;
     justify-content: flex-start;
 }
@@ -750,6 +752,34 @@ button {
     margin-bottom: 14px;
 }
 
+.responsive-form-grid,
+.report-filter-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0 14px;
+}
+
+.form-grid-wide,
+.report-search-field {
+    grid-column: 1 / -1;
+}
+
+.checkbox-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0 14px;
+}
+
+.conditional-form-group {
+    display: flex;
+    flex-direction: column;
+    margin-top: 15px;
+}
+
+.conditional-form-group label {
+    margin-bottom: 8px;
+}
+
 .checkbox-row {
     min-height: 44px;
     display: flex;
@@ -857,6 +887,114 @@ button {
     background: rgba(59, 130, 246, 0.16);
 }
 
+.status-badge.warning {
+    color: #fde047;
+    background: rgba(234, 179, 8, 0.16);
+}
+
+.status-badge.danger {
+    color: #fca5a5;
+    background: rgba(239, 68, 68, 0.16);
+}
+
+.status-badge.completed {
+    color: #c4b5fd;
+    background: rgba(139, 92, 246, 0.16);
+}
+
+.report-filter-panel {
+    margin-bottom: 20px;
+    padding: 16px;
+}
+
+.report-filter-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.report-filter-panel .input-group {
+    margin-bottom: 14px;
+}
+
+.report-filter-actions,
+.export-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.report-filter-actions {
+    padding-top: 2px;
+}
+
+.export-actions {
+    margin-left: auto;
+}
+
+.report-filter-actions button {
+    min-height: 42px;
+}
+
+.report-card-list {
+    display: none;
+}
+
+.report-card {
+    padding: 16px;
+    border: 1px solid var(--glass-border);
+    border-radius: 12px;
+    background: rgba(15, 23, 42, 0.55);
+}
+
+.report-card-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 12px;
+}
+
+.report-card-header h3 {
+    font-size: 1rem;
+}
+
+.report-card-header p {
+    margin-top: 3px;
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+}
+
+.report-card-details {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 9px 12px;
+}
+
+.report-card-details div {
+    min-width: 0;
+}
+
+.report-card-details dt {
+    color: var(--text-secondary);
+    font-size: 0.72rem;
+}
+
+.report-card-details dd {
+    margin-top: 2px;
+    color: var(--text-primary);
+    font-size: 0.86rem;
+    overflow-wrap: anywhere;
+}
+
+.report-card-notes {
+    margin-top: 12px;
+    padding-top: 10px;
+    border-top: 1px solid var(--glass-border);
+    color: var(--text-secondary);
+    font-size: 0.82rem;
+    overflow-wrap: anywhere;
+}
+
 .empty-state {
     padding: 24px 12px;
     color: var(--text-secondary);
@@ -907,6 +1045,39 @@ button {
     .management-item-header .status-badge {
         align-self: flex-start;
     }
+    .responsive-form-grid,
+    .report-filter-grid,
+    .checkbox-grid {
+        grid-template-columns: 1fr;
+    }
+    .form-grid-wide,
+    .report-search-field {
+        grid-column: auto;
+    }
+    .report-filter-actions,
+    .export-actions {
+        align-items: stretch;
+        flex-direction: column;
+        width: 100%;
+    }
+    .export-actions {
+        margin-left: 0;
+    }
+    .report-filter-actions button,
+    .export-actions button {
+        width: 100%;
+    }
+    #report-detail-section .table-container {
+        display: none;
+    }
+    .report-card-list {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+    }
+    .report-card-details {
+        grid-template-columns: 1fr 1fr;
+    }
     .form-actions {
         flex-direction: column;
     }
@@ -934,6 +1105,9 @@ button {
     .management-tab {
         font-size: 0.78rem;
         padding: 6px;
+    }
+    .report-card-details {
+        grid-template-columns: 1fr;
     }
 }
 

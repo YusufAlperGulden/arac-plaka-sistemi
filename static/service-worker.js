@@ -1,4 +1,4 @@
-const CACHE_NAME = 'plaka-sistemi-v18-persistent-fleet';
+const CACHE_NAME = 'plaka-sistemi-v20-fleet-operations';
 const CORE_ASSETS = [
   '/',
   '/static/css/style.css',

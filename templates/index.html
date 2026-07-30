@@ -13,7 +13,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <!-- Özel CSS dosyamız -->
-    <link rel="stylesheet" href="/static/css/style.css?v=18">
+    <link rel="stylesheet" href="/static/css/style.css?v=20">
 </head>
 <body>
     <!-- Bildirim (Toast) Mesajları Alanı -->
@@ -85,6 +85,12 @@
                     <h3>Devam Eden Kullanımlar</h3>
                     <p>Şu anda kullanımda olan araçları görüntüle</p>
                 </button>
+
+                <button id="maintenance-reminders-btn" class="action-big-btn glass-panel wide-action-btn">
+                    <div class="action-icon">🔧</div>
+                    <h3>Bakım ve Uyarılar</h3>
+                    <p>Yaklaşan ve geciken araç işlemlerini görüntüle</p>
+                </button>
             </div>
 
             <!-- Yeni Yönetim / Rapor Butonu -->
@@ -119,6 +125,12 @@
                     <p>Plakaya göre geçmiş hareketler</p>
                 </button>
 
+                <button id="report-advanced-btn" class="action-big-btn glass-panel">
+                    <div class="action-icon">🔎</div>
+                    <h3>Gelişmiş Hareket Raporu</h3>
+                    <p>Tarih, sürücü ve araç bilgilerine göre filtrele</p>
+                </button>
+
                 <button id="fleet-management-btn" class="action-big-btn glass-panel admin-only">
                     <div class="action-icon">🛠️</div>
                     <h3>Araç Tanımları</h3>
@@ -130,10 +142,99 @@
                     <h3>Hareket Türleri</h3>
                     <p>Kullanım amaçlarını yönetin</p>
                 </button>
+
+                <button id="driver-management-btn" class="action-big-btn glass-panel admin-only">
+                    <div class="action-icon">👤</div>
+                    <h3>Sürücü Yönetimi</h3>
+                    <p>Personel ve sürücü bilgilerini yönetin</p>
+                </button>
             </div>
 
             <p id="database-status-text" class="database-status-text admin-only" aria-live="polite"></p>
             <button id="back-from-reports-menu-btn" class="btn-secondary" style="margin-top: 30px; width: 100%;">⬅ Geri Dön</button>
+        </div>
+    </section>
+
+    <!-- Bakım ve Uyarılar -->
+    <section id="maintenance-reminders-section" class="screen-section hidden">
+        <div class="glass-card management-wrapper">
+            <div class="management-header">
+                <button id="back-from-maintenance-reminders-btn" class="btn-secondary">⬅ Geri</button>
+                <div>
+                    <h2>Bakım ve Uyarılar</h2>
+                    <p>Bakım, muayene, sigorta ve diğer araç hatırlatmaları.</p>
+                </div>
+            </div>
+
+            <form id="maintenance-reminder-form" class="management-form glass-panel admin-only">
+                <input id="maintenance-reminder-id" type="hidden">
+                <div class="responsive-form-grid">
+                    <div class="input-group">
+                        <label for="maintenance-vehicle-select">Araç</label>
+                        <select id="maintenance-vehicle-select" required>
+                            <option value="" disabled selected>Araç Seçin...</option>
+                        </select>
+                    </div>
+                    <div class="input-group">
+                        <label for="maintenance-reminder-type">Uyarı Türü</label>
+                        <select id="maintenance-reminder-type" required>
+                            <option value="Periyodik Bakım">Periyodik Bakım</option>
+                            <option value="Muayene">Muayene</option>
+                            <option value="Sigorta">Sigorta</option>
+                            <option value="Diğer">Diğer</option>
+                        </select>
+                    </div>
+                    <div class="input-group form-grid-wide">
+                        <label for="maintenance-title">Başlık</label>
+                        <input id="maintenance-title" type="text" maxlength="160" placeholder="Örn: 120.000 KM bakımı" required>
+                    </div>
+                    <div class="input-group">
+                        <label for="maintenance-due-date">Hedef Tarih</label>
+                        <input id="maintenance-due-date" type="date">
+                    </div>
+                    <div class="input-group">
+                        <label for="maintenance-due-mileage">Hedef Kilometre</label>
+                        <input id="maintenance-due-mileage" type="number" min="0" step="1" inputmode="numeric" placeholder="Örn: 120000">
+                    </div>
+                    <div class="input-group form-grid-wide">
+                        <label for="maintenance-notes">Açıklama</label>
+                        <textarea id="maintenance-notes" rows="3" maxlength="1000" placeholder="İsteğe bağlı açıklama giriniz..."></textarea>
+                    </div>
+                </div>
+                <div class="checkbox-grid">
+                    <label class="checkbox-row">
+                        <input id="maintenance-active" type="checkbox" checked>
+                        <span>Aktif</span>
+                    </label>
+                    <label class="checkbox-row">
+                        <input id="maintenance-completed" type="checkbox">
+                        <span>Tamamlandı</span>
+                    </label>
+                </div>
+                <div class="form-actions">
+                    <button id="maintenance-save-btn" class="btn-primary" type="submit">Uyarıyı Kaydet</button>
+                    <button id="maintenance-cancel-btn" class="btn-secondary hidden" type="button">Vazgeç</button>
+                </div>
+            </form>
+
+            <div class="management-toolbar">
+                <div class="input-group compact-input">
+                    <label for="maintenance-status-filter">Durum</label>
+                    <select id="maintenance-status-filter">
+                        <option value="all">Tüm Uyarılar</option>
+                        <option value="overdue">Geciken</option>
+                        <option value="due_soon">Yaklaşan</option>
+                        <option value="upcoming">Planlanan</option>
+                        <option value="completed">Tamamlanan</option>
+                        <option value="inactive">Pasif</option>
+                    </select>
+                </div>
+                <button id="refresh-maintenance-reminders-btn" class="btn-outline" type="button">🔄 Yenile</button>
+            </div>
+
+            <div id="maintenance-reminder-list" class="management-list" aria-live="polite">
+                <p class="empty-state">Yükleniyor...</p>
+            </div>
         </div>
     </section>
 
@@ -251,6 +352,10 @@
                         <label for="vehicle-year">Model Yılı</label>
                         <input id="vehicle-year" type="number" min="1900" max="2100" placeholder="Örn: 2024">
                     </div>
+                    <div class="input-group">
+                        <label for="vehicle-current-mileage">Güncel Kilometre</label>
+                        <input id="vehicle-current-mileage" type="number" min="0" step="1" inputmode="numeric" placeholder="Örn: 145000">
+                    </div>
                     <label class="checkbox-row">
                         <input id="vehicle-active" type="checkbox" checked>
                         <span>Aktif</span>
@@ -290,6 +395,16 @@
                     <label for="movement-type-sort-order">Sıra</label>
                     <input id="movement-type-sort-order" type="number" value="0">
                 </div>
+                <div class="checkbox-grid">
+                    <label class="checkbox-row">
+                        <input id="movement-type-requires-request-no" type="checkbox">
+                        <span>Talep No zorunlu</span>
+                    </label>
+                    <label class="checkbox-row">
+                        <input id="movement-type-requires-service-form-no" type="checkbox">
+                        <span>Servis Formu zorunlu</span>
+                    </label>
+                </div>
                 <label class="checkbox-row">
                     <input id="movement-type-active" type="checkbox" checked>
                     <span>Aktif</span>
@@ -301,6 +416,61 @@
             </form>
 
             <div id="movement-type-list" class="management-list" aria-live="polite"></div>
+        </div>
+    </section>
+
+    <!-- Sürücü Yönetimi -->
+    <section id="driver-management-section" class="screen-section hidden">
+        <div class="glass-card management-wrapper">
+            <div class="management-header">
+                <button id="back-from-driver-management-btn" class="btn-secondary">⬅ Geri</button>
+                <div>
+                    <h2>Sürücü Yönetimi</h2>
+                    <p>Personel, iletişim ve ehliyet bilgilerini yönetin.</p>
+                </div>
+            </div>
+
+            <form id="driver-form" class="management-form glass-panel">
+                <input id="driver-id" type="hidden">
+                <div class="responsive-form-grid">
+                    <div class="input-group">
+                        <label for="driver-employee-no">Personel No</label>
+                        <input id="driver-employee-no" type="text" maxlength="50" autocomplete="off">
+                    </div>
+                    <div class="input-group">
+                        <label for="driver-full-name">Ad Soyad</label>
+                        <input id="driver-full-name" type="text" maxlength="120" autocomplete="name" required>
+                    </div>
+                    <div class="input-group">
+                        <label for="driver-department">Departman</label>
+                        <input id="driver-department" type="text" maxlength="120">
+                    </div>
+                    <div class="input-group">
+                        <label for="driver-phone">Telefon</label>
+                        <input id="driver-phone" type="tel" maxlength="40" autocomplete="tel">
+                    </div>
+                    <div class="input-group">
+                        <label for="driver-license-class">Ehliyet Sınıfı</label>
+                        <input id="driver-license-class" type="text" maxlength="40" placeholder="Örn: B">
+                    </div>
+                    <div class="input-group">
+                        <label for="driver-license-expiry-date">Ehliyet Geçerlilik Tarihi</label>
+                        <input id="driver-license-expiry-date" type="date">
+                    </div>
+                </div>
+                <label class="checkbox-row">
+                    <input id="driver-active" type="checkbox" checked>
+                    <span>Aktif</span>
+                </label>
+                <div class="form-actions">
+                    <button id="driver-save-btn" class="btn-primary" type="submit">Sürücüyü Kaydet</button>
+                    <button id="driver-cancel-btn" class="btn-secondary hidden" type="button">Vazgeç</button>
+                </div>
+            </form>
+
+            <div id="driver-list" class="management-list" aria-live="polite">
+                <p class="empty-state">Yükleniyor...</p>
+            </div>
         </div>
     </section>
 
@@ -340,39 +510,80 @@
                 </div>
             </div>
             
-            <!-- FİLTRELEME VE SIRALAMA ÇUBUĞU -->
-            <div class="filter-sort-bar glass-panel" style="margin-bottom: 20px; padding: 15px; display: flex; gap: 15px; flex-wrap: wrap; align-items: center; justify-content: space-between;">
-                
-                <div class="filter-group" style="display: flex; gap: 10px; align-items: center; flex: 1; min-width: 300px;">
-                    <strong style="color: var(--text-secondary); font-size: 0.9rem;">Filtrele:</strong>
-                    
-                    <select id="filter-action-type" style="padding: 8px; font-size: 0.9rem; flex: 1;">
+            <!-- FİLTRELEME, SIRALAMA VE DIŞA AKTARMA -->
+            <div class="filter-sort-bar glass-panel report-filter-panel">
+                <div class="report-filter-grid">
+                    <div class="input-group compact-input">
+                        <label for="filter-action-type">Kullanım Amacı</label>
+                        <select id="filter-action-type">
                         <option value="all">Tüm Kullanım Amaçları</option>
                         {% for purpose in usage_purposes %}
                         <option value="{{ purpose }}">{{ purpose }}</option>
                         {% endfor %}
-                    </select>
-                    
-                    <div style="position: relative; flex: 2; display: flex; align-items: center;">
-                        <span style="position: absolute; left: 10px; font-size: 1rem; color: #94a3b8; pointer-events: none;">🔍</span>
-                        <input type="text" id="global-search" placeholder="Plaka, araç, sürücü, talep, servis veya not ara..." style="width: 100%; padding: 8px 8px 8px 35px; font-size: 0.9rem; background: rgba(15, 23, 42, 0.6); border: 1px solid var(--glass-border); border-radius: 8px; color: white;">
+                        </select>
+                    </div>
+                    <div class="input-group compact-input">
+                        <label for="report-date-from">Başlangıç Tarihi</label>
+                        <input id="report-date-from" type="date">
+                    </div>
+                    <div class="input-group compact-input">
+                        <label for="report-date-to">Bitiş Tarihi</label>
+                        <input id="report-date-to" type="date">
+                    </div>
+                    <div class="input-group compact-input">
+                        <label for="report-driver-filter">Sürücü</label>
+                        <select id="report-driver-filter">
+                            <option value="">Tüm Sürücüler</option>
+                        </select>
+                    </div>
+                    <div class="input-group compact-input">
+                        <label for="report-brand-filter">Marka</label>
+                        <select id="report-brand-filter">
+                            <option value="">Tüm Markalar</option>
+                        </select>
+                    </div>
+                    <div class="input-group compact-input">
+                        <label for="report-model-filter">Model</label>
+                        <select id="report-model-filter">
+                            <option value="">Tüm Modeller</option>
+                        </select>
+                    </div>
+                    <div class="input-group compact-input">
+                        <label for="report-status-filter">Durum</label>
+                        <select id="report-status-filter">
+                            <option value="">Tüm Durumlar</option>
+                            <option value="active">Devam Eden</option>
+                            <option value="completed">Tamamlanan</option>
+                        </select>
+                    </div>
+                    <div class="input-group compact-input report-search-field">
+                        <label for="global-search">Metin Arama</label>
+                        <input type="search" id="global-search" placeholder="Plaka, araç, sürücü, talep, servis veya not ara...">
+                    </div>
+                    <div class="input-group compact-input">
+                        <label for="sort-by">Sırala</label>
+                        <select id="sort-by">
+                            <option value="date-desc">Ekleme Tarihi (En Yeni)</option>
+                            <option value="date-asc">Ekleme Tarihi (En Eski)</option>
+                            <option value="distance-desc">Yapılan Mesafe (En Çok)</option>
+                            <option value="distance-asc">Yapılan Mesafe (En Az)</option>
+                            <option value="plate-asc">Plaka (A-Z)</option>
+                            <option value="plate-desc">Plaka (Z-A)</option>
+                            <option value="driver-asc">Sürücü Adı (A-Z)</option>
+                            <option value="driver-desc">Sürücü Adı (Z-A)</option>
+                        </select>
                     </div>
                 </div>
 
-                <div class="sort-group" style="display: flex; gap: 10px; align-items: center; min-width: 250px;">
-                    <strong style="color: var(--text-secondary); font-size: 0.9rem;">Sırala:</strong>
-                    <select id="sort-by" style="padding: 8px; font-size: 0.9rem; flex: 1;">
-                        <option value="date-desc">Ekleme Tarihi (En Yeni)</option>
-                        <option value="date-asc">Ekleme Tarihi (En Eski)</option>
-                        <option value="distance-desc">Yapılan Mesafe (En Çok)</option>
-                        <option value="distance-asc">Yapılan Mesafe (En Az)</option>
-                        <option value="plate-asc">Plaka (A-Z)</option>
-                        <option value="plate-desc">Plaka (Z-A)</option>
-                        <option value="driver-asc">Sürücü Adı (A-Z)</option>
-                        <option value="driver-desc">Sürücü Adı (Z-A)</option>
-                    </select>
+                <div class="report-filter-actions">
+                    <button id="apply-advanced-filters-btn" class="btn-primary" type="button">Filtreleri Uygula</button>
+                    <button id="clear-advanced-filters-btn" class="btn-secondary" type="button">Filtreleri Temizle</button>
+                    <div class="export-actions" aria-label="Raporu dışa aktar">
+                        <button id="export-csv-btn" class="btn-outline" type="button">CSV İndir</button>
+                        <button id="export-xlsx-btn" class="btn-outline" type="button">Excel İndir</button>
+                        <button id="export-pdf-btn" class="btn-outline" type="button">PDF İndir</button>
+                    </div>
                 </div>
-                
             </div>
 
             <div class="table-container" style="overflow-x: auto; white-space: nowrap;">
@@ -400,6 +611,7 @@
                     </tbody>
                 </table>
             </div>
+            <div id="report-card-list" class="report-card-list" aria-live="polite"></div>
         </div>
     </section>
 
@@ -487,6 +699,11 @@
                             <option value="{{ purpose }}" {% if purpose == "Diğer" %}selected{% endif %}>{{ purpose }}</option>
                             {% endfor %}
                         </select>
+
+                        <label for="driver-select" style="margin-top: 15px;">Sürücü</label>
+                        <select id="driver-select" name="driver-select" required>
+                            <option value="" disabled selected>Sürücü Seçin...</option>
+                        </select>
                     </div>
 
                     <!-- Adım 2: Kilometre Girişi (Başlangıçta Gizli) -->
@@ -494,11 +711,15 @@
                         <label for="mileage-input">Kilometre Değeri</label>
                         <input type="number" id="mileage-input" placeholder="Örn: 145000" min="0" step="1">
 
-                        <label for="request-no-input" style="margin-top: 15px;">Talep No (Opsiyonel)</label>
-                        <input type="text" id="request-no-input" placeholder="Talep numarasını giriniz..." maxlength="100" autocomplete="off">
+                        <div id="request-no-group" class="conditional-form-group hidden">
+                            <label id="request-no-label" for="request-no-input">Talep No (Zorunlu)</label>
+                            <input type="text" id="request-no-input" placeholder="Talep numarasını giriniz..." maxlength="100" autocomplete="off">
+                        </div>
 
-                        <label for="service-form-no-input" style="margin-top: 15px;">Servis Formu Numarası (Opsiyonel)</label>
-                        <input type="text" id="service-form-no-input" placeholder="Servis formu numarasını giriniz..." maxlength="100" autocomplete="off">
+                        <div id="service-form-no-group" class="conditional-form-group hidden">
+                            <label id="service-form-no-label" for="service-form-no-input">Servis Formu Numarası (Zorunlu)</label>
+                            <input type="text" id="service-form-no-input" placeholder="Servis formu numarasını giriniz..." maxlength="100" autocomplete="off">
+                        </div>
 
                         <label for="notes-input" style="margin-top: 15px;">Açıklama (Not)</label>
                         <input type="text" id="notes-input" placeholder="İsteğe bağlı not giriniz...">
@@ -568,8 +789,8 @@
     <script src="/static/js/camera.js"></script>
     <!-- Tesseract.js for OCR -->
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
-    <script src="/static/js/ocr-utils.js?v=18"></script>
-    <script src="/static/js/main.js?v=18"></script>
+    <script src="/static/js/ocr-utils.js?v=20"></script>
+    <script src="/static/js/main.js?v=20"></script>
 
     <script>
         // Sayfa değiştiğinde ana başlığı (Fatura İşleme Sistemi benzeri) gizle/göster

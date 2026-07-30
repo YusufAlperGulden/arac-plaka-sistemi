@@ -1,5 +1,5 @@
-from flask import Flask, render_template, request, jsonify, session
-from datetime import datetime, timezone
+from flask import Flask, render_template, request, jsonify, session, send_file
+from datetime import date, datetime, time, timedelta, timezone
 from functools import wraps
 from zoneinfo import ZoneInfo
 import os
@@ -8,7 +8,7 @@ import io
 import json
 import re
 from PIL import Image
-from sqlalchemy import func
+from sqlalchemy import Numeric, cast, func, literal, or_, text
 from sqlalchemy.exc import IntegrityError
 from werkzeug.middleware.proxy_fix import ProxyFix
 from flask_limiter import Limiter
@@ -18,12 +18,16 @@ from models import (
     ActiveTrip,
     AppSetting,
     Brand,
+    Driver,
     MovementRecord,
     MovementType,
     Vehicle,
+    VehicleReminder,
     VehicleModel,
     db,
 )
+from report_exports import export_csv, export_pdf, export_xlsx
+from schema_migrations import ensure_schema_extensions
 
 try:
     from google import genai
@@ -135,6 +139,38 @@ VEHICLE_USAGE_PURPOSE_DESCRIPTIONS = {
     "Şahsi Kullanım": "Şahsi kullanımlar",
     "Proje - Arıza - Bakım": "Proje, arıza, garanti ve bakım için kullanım",
 }
+VEHICLE_USAGE_PURPOSE_FIELD_RULES = {
+    "Kurum İçi Operasyonlar": {
+        "requires_request_no": True,
+        "requires_service_form_no": False,
+    },
+    "Servis Amaçlı Kullanım": {
+        "requires_request_no": False,
+        "requires_service_form_no": True,
+    },
+}
+REMINDER_UPCOMING_DAYS = 30
+REMINDER_UPCOMING_MILEAGE = 1000
+REPORT_API_MAX_RECORDS = 5000
+REPORT_EXPORT_MAX_RECORDS = 10000
+RECENT_DROPOFF_GUARD_SECONDS = 10
+REPORT_EXPORT_FORMATS = {
+    "csv": (
+        export_csv,
+        "text/csv",
+        "csv",
+    ),
+    "xlsx": (
+        export_xlsx,
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "xlsx",
+    ),
+    "pdf": (
+        export_pdf,
+        "application/pdf",
+        "pdf",
+    ),
+}
 
 # Dummy veri tabanı simülasyonu - Detaylı araç tanımları
 VEHICLES_DB = {
@@ -224,6 +260,115 @@ def parse_boolean(value, default=True):
     return bool(value)
 
 
+def normalize_mileage(value):
+    """Return a non-negative odometer integer, including Turkish grouping."""
+    if isinstance(value, bool) or value is None:
+        return None
+    if isinstance(value, int):
+        mileage = value
+    elif isinstance(value, float):
+        if not value.is_integer():
+            return None
+        mileage = int(value)
+    else:
+        raw_value = str(value).strip()
+        if re.fullmatch(r"\d+", raw_value):
+            mileage = int(raw_value)
+        elif re.fullmatch(r"\d{1,3}(?:[.,\s]\d{3})+", raw_value):
+            mileage = int(re.sub(r"[.,\s]", "", raw_value))
+        elif re.fullmatch(r"\d+\.0+", raw_value):
+            mileage = int(raw_value.split(".", 1)[0])
+        else:
+            return None
+    if mileage < 0 or mileage > 2_147_483_647:
+        return None
+    return mileage
+
+
+def parse_optional_int(value):
+    if value in (None, ""):
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def parse_optional_date(value):
+    if value in (None, ""):
+        return None
+    if isinstance(value, date) and not isinstance(value, datetime):
+        return value
+    try:
+        return date.fromisoformat(str(value).strip())
+    except (TypeError, ValueError):
+        return None
+
+
+def normalize_employee_no(value):
+    employee_no = " ".join(str(value or "").strip().upper().split())
+    return employee_no or None
+
+
+def lock_plate_transaction(plate):
+    """Serialize pickup/dropoff writes for the same plate on PostgreSQL."""
+    if db.engine.dialect.name != "postgresql":
+        return
+    db.session.execute(
+        text("SELECT pg_advisory_xact_lock(hashtext(:plate))"),
+        {"plate": plate},
+    )
+
+
+def resolve_driver(data, fallback_name):
+    driver_id = parse_optional_int(data.get("driver_id"))
+    if data.get("driver_id") not in (None, "") and driver_id is None:
+        return None, None, "Geçerli bir sürücü seçmelisiniz."
+    if driver_id is None:
+        return None, fallback_name, None
+    driver = db.session.get(Driver, driver_id)
+    if driver is None or not driver.active:
+        return None, None, "Seçilen sürücü aktif değil veya bulunamadı."
+    return driver, driver.full_name, None
+
+
+def validate_required_movement_fields(
+    action_type,
+    request_no,
+    service_form_no,
+    allow_inactive=False,
+):
+    movement_type = db.session.scalar(
+        db.select(MovementType).where(
+            func.lower(MovementType.name) == action_type.lower()
+        )
+    )
+    if movement_type is None:
+        if allow_inactive:
+            return None
+        return "Geçerli ve aktif bir hareket türü seçmelisiniz."
+    if not movement_type.active and not allow_inactive:
+        return "Geçerli ve aktif bir hareket türü seçmelisiniz."
+    if movement_type.requires_request_no and not request_no:
+        return "Seçilen hareket türü için Talep No zorunludur."
+    if movement_type.requires_service_form_no and not service_form_no:
+        return "Seçilen hareket türü için Servis Formu Numarası zorunludur."
+    return None
+
+
+def canonical_movement_type_name(action_type, allow_inactive=False):
+    movement_type = db.session.scalar(
+        db.select(MovementType).where(
+            func.lower(MovementType.name) == action_type.lower()
+        )
+    )
+    if movement_type is None or (
+        not movement_type.active and not allow_inactive
+    ):
+        return None
+    return movement_type.name
+
+
 def require_authenticated(view):
     @wraps(view)
     def wrapped(*args, **kwargs):
@@ -280,6 +425,41 @@ def get_database_vehicle_name(vehicle):
     ) or "Bilinmeyen Araç"
 
 
+def link_vehicle_history(vehicle):
+    """Attach earlier plate-only history and preserve its highest known KM."""
+    vehicle_name = get_database_vehicle_name(vehicle)
+    known_mileage = vehicle.current_mileage
+    records = db.session.scalars(
+        db.select(MovementRecord).where(
+            MovementRecord.plate == vehicle.plate,
+            MovementRecord.vehicle_id.is_(None),
+        )
+    ).all()
+    for record in records:
+        record.vehicle_id = vehicle.id
+        end_mileage = normalize_mileage(record.end_mileage)
+        if end_mileage is not None:
+            known_mileage = max(known_mileage or 0, end_mileage)
+        if record.vehicle_name in {"", "Araç", "Bilinmeyen Araç"}:
+            record.vehicle_name = vehicle_name
+
+    active_trips = db.session.scalars(
+        db.select(ActiveTrip).where(
+            ActiveTrip.plate == vehicle.plate,
+            ActiveTrip.vehicle_id.is_(None),
+        )
+    ).all()
+    for active_trip in active_trips:
+        active_trip.vehicle_id = vehicle.id
+        start_mileage = normalize_mileage(active_trip.start_mileage)
+        if start_mileage is not None:
+            known_mileage = max(known_mileage or 0, start_mileage)
+        if active_trip.vehicle_name in {"", "Araç", "Bilinmeyen Araç"}:
+            active_trip.vehicle_name = vehicle_name
+
+    vehicle.current_mileage = known_mileage
+
+
 def serialize_database_vehicle(vehicle):
     vehicle_name = get_database_vehicle_name(vehicle)
     display_plate = format_plate_for_display(vehicle.plate)
@@ -292,6 +472,7 @@ def serialize_database_vehicle(vehicle):
         "model_id": vehicle.model_id,
         "model": vehicle.model.name,
         "year": vehicle.year,
+        "current_mileage": vehicle.current_mileage,
         "active": vehicle.active,
         "vehicle_name": vehicle_name,
         "display_label": f"{vehicle_name} - {display_plate}",
@@ -324,7 +505,35 @@ def serialize_movement_type(movement_type):
         "description": movement_type.description or "",
         "active": movement_type.active,
         "sort_order": movement_type.sort_order,
+        "requires_request_no": movement_type.requires_request_no,
+        "requires_service_form_no": (
+            movement_type.requires_service_form_no
+        ),
         "locked": movement_type.name == "Diğer",
+    }
+
+
+def serialize_driver(driver):
+    employee_no = driver.employee_no or ""
+    display_label = (
+        f"{driver.full_name} ({employee_no})"
+        if employee_no
+        else driver.full_name
+    )
+    return {
+        "id": driver.id,
+        "employee_no": employee_no,
+        "full_name": driver.full_name,
+        "department": driver.department or "",
+        "phone": driver.phone or "",
+        "license_class": driver.license_class or "",
+        "license_expiry_date": (
+            driver.license_expiry_date.isoformat()
+            if driver.license_expiry_date
+            else ""
+        ),
+        "active": driver.active,
+        "display_label": display_label,
     }
 
 
@@ -333,6 +542,7 @@ def serialize_active_trip(active_trip):
     return {
         "id": active_trip.id,
         "vehicle_id": active_trip.vehicle_id,
+        "driver_id": active_trip.driver_id,
         "plate": active_trip.plate,
         "display_plate": display_plate,
         "vehicle_name": active_trip.vehicle_name,
@@ -345,11 +555,17 @@ def serialize_active_trip(active_trip):
         "request_no": active_trip.request_no or "",
         "service_form_no": active_trip.service_form_no or "",
         "notes": active_trip.notes or "",
+        "created_by": active_trip.created_by or "",
     }
 
 
 def serialize_movement_record(record):
     return {
+        "id": record.id,
+        "vehicle_id": record.vehicle_id,
+        "driver_id": record.driver_id,
+        "status": "Tamamlandı",
+        "status_key": "completed",
         "action_type": record.action_type,
         "add_date": format_datetime(record.add_date),
         "vehicle_name": record.vehicle_name,
@@ -363,6 +579,95 @@ def serialize_movement_record(record):
         "distance": record.distance,
         "end_date": format_datetime(record.end_date),
         "notes": record.notes or "",
+        "created_by": record.created_by or "",
+    }
+
+
+def get_reminder_status(reminder):
+    if reminder.completed_at is not None:
+        return "completed", "Tamamlandı"
+    if not reminder.active:
+        return "inactive", "Pasif"
+
+    today = datetime.now(APP_TIMEZONE).date()
+    current_mileage = (
+        reminder.vehicle.current_mileage
+        if reminder.vehicle is not None
+        else None
+    )
+    date_is_due = reminder.due_date is not None and reminder.due_date <= today
+    mileage_is_due = (
+        reminder.due_mileage is not None
+        and current_mileage is not None
+        and reminder.due_mileage <= current_mileage
+    )
+    if date_is_due or mileage_is_due:
+        return "overdue", "Gecikmiş"
+
+    date_is_upcoming = (
+        reminder.due_date is not None
+        and reminder.due_date <= today + timedelta(days=REMINDER_UPCOMING_DAYS)
+    )
+    mileage_is_upcoming = (
+        reminder.due_mileage is not None
+        and current_mileage is not None
+        and reminder.due_mileage
+        <= current_mileage + REMINDER_UPCOMING_MILEAGE
+    )
+    if date_is_upcoming or mileage_is_upcoming:
+        return "due_soon", "Yaklaşıyor"
+    return "upcoming", "Planlandı"
+
+
+def serialize_vehicle_reminder(reminder):
+    status_key, status = get_reminder_status(reminder)
+    vehicle = reminder.vehicle
+    vehicle_name = (
+        get_database_vehicle_name(vehicle)
+        if vehicle is not None
+        else ""
+    )
+    vehicle_display_label = (
+        f"{vehicle_name} - {format_plate_for_display(vehicle.plate)}"
+        if vehicle is not None
+        else ""
+    )
+    return {
+        "id": reminder.id,
+        "vehicle_id": reminder.vehicle_id,
+        "vehicle": (
+            serialize_database_vehicle(vehicle)
+            if vehicle is not None
+            else None
+        ),
+        "plate": vehicle.plate if vehicle is not None else "",
+        "vehicle_name": vehicle_name,
+        "vehicle_display_label": vehicle_display_label,
+        "display_label": vehicle_display_label,
+        "reminder_type": reminder.reminder_type,
+        "title": reminder.title,
+        "due_date": (
+            reminder.due_date.isoformat()
+            if reminder.due_date is not None
+            else ""
+        ),
+        "due_mileage": reminder.due_mileage,
+        "current_mileage": (
+            vehicle.current_mileage
+            if vehicle is not None
+            else None
+        ),
+        "notes": reminder.notes or "",
+        "active": reminder.active,
+        "completed_at": (
+            ensure_aware_utc(reminder.completed_at).isoformat()
+            if reminder.completed_at is not None
+            else ""
+        ),
+        "status": status_key,
+        "status_label": status,
+        "status_key": status_key,
+        "completed": reminder.completed_at is not None,
     }
 
 
@@ -494,6 +799,7 @@ def get_plates():
     }), 200
 
 @app.route('/api/record', methods=['POST'])
+@require_authenticated
 def save_record():
     """
     Araç Alma (Pickup) -> ACTIVE_TRIPS'e kaydeder.
@@ -504,7 +810,7 @@ def save_record():
     plate = normalize_turkish_plate(data.get('plate'))
     action = data.get('action') # 'pickup' veya 'dropoff'
     action_type = str(data.get('action_type') or 'Diğer').strip()
-    mileage = str(data.get('mileage', "0")).strip()
+    mileage = normalize_mileage(data.get('mileage'))
     user = str(data.get('user') or '').strip()
     notes = str(data.get('notes') or '').strip()
     request_no = str(data.get('request_no') or '').strip()
@@ -512,14 +818,30 @@ def save_record():
     
     if not plate or not action or not user:
         return jsonify({"success": False, "message": "Eksik veri gönderildi."}), 400
+    if action not in {"pickup", "dropoff"}:
+        return jsonify({"success": False, "message": "Geçersiz işlem."}), 400
+    if mileage is None:
+        return jsonify({
+            "success": False,
+            "message": "Kilometre sıfır veya daha büyük tam sayı olmalıdır.",
+        }), 400
 
+    lock_plate_transaction(plate)
     vehicle = db.session.scalar(
         db.select(Vehicle).where(Vehicle.plate == plate)
     )
     vehicle_name = get_database_vehicle_name(vehicle)
     current_time = now_utc()
+    created_by = str(session.get("user") or "").strip()
     
     if action == 'pickup':
+        canonical_action_type = canonical_movement_type_name(action_type)
+        if canonical_action_type is None:
+            return jsonify({
+                "success": False,
+                "message": "Geçerli ve aktif bir hareket türü seçmelisiniz.",
+            }), 400
+        action_type = canonical_action_type
         existing_trip = db.session.scalar(
             db.select(ActiveTrip).where(ActiveTrip.plate == plate)
         )
@@ -529,19 +851,49 @@ def save_record():
                 "message": f"{plate} için devam eden bir kullanım zaten var.",
             }), 409
 
+        driver_profile, driver_name, driver_error = resolve_driver(data, user)
+        if driver_error:
+            return jsonify({"success": False, "message": driver_error}), 400
+        if (
+            vehicle is not None
+            and vehicle.current_mileage is not None
+            and mileage < vehicle.current_mileage
+        ):
+            return jsonify({
+                "success": False,
+                "message": (
+                    f"Girilen KM ({mileage}), aracın son bilinen "
+                    f"KM değerinden ({vehicle.current_mileage}) düşük olamaz."
+                ),
+            }), 400
+        required_field_error = validate_required_movement_fields(
+            action_type,
+            request_no,
+            service_form_no,
+        )
+        if required_field_error:
+            return jsonify({
+                "success": False,
+                "message": required_field_error,
+            }), 400
+
         active_trip = ActiveTrip(
             vehicle_id=vehicle.id if vehicle else None,
+            driver_id=driver_profile.id if driver_profile else None,
             plate=plate,
             vehicle_name=vehicle_name,
-            start_mileage=mileage,
+            start_mileage=str(mileage),
             start_date=current_time,
-            driver=user,
+            driver=driver_name,
             action_type=action_type,
             notes=notes,
             request_no=request_no,
             service_form_no=service_form_no,
+            created_by=created_by,
         )
         db.session.add(active_trip)
+        if vehicle is not None:
+            vehicle.current_mileage = mileage
         try:
             db.session.commit()
         except IntegrityError:
@@ -550,43 +902,146 @@ def save_record():
                 "success": False,
                 "message": f"{plate} için devam eden bir kullanım zaten var.",
             }), 409
-        return jsonify({"success": True, "message": f"{plate} için Araç Alma kaydedildi. (Başlangıç KM: {mileage})"}), 201
+        return jsonify({
+            "success": True,
+            "message": (
+                f"{plate} için Araç Alma kaydedildi. "
+                f"(Başlangıç KM: {mileage})"
+            ),
+        }), 201
         
-    elif action == 'dropoff':
+    if action == 'dropoff':
         active_trip = db.session.scalar(
             db.select(ActiveTrip).where(ActiveTrip.plate == plate)
         )
         if active_trip is None:
+            recent_record = db.session.scalar(
+                db.select(MovementRecord.id)
+                .where(
+                    MovementRecord.plate == plate,
+                    MovementRecord.end_date >= (
+                        current_time - timedelta(
+                            seconds=RECENT_DROPOFF_GUARD_SECONDS
+                        )
+                    ),
+                )
+                .order_by(MovementRecord.end_date.desc())
+                .limit(1)
+            )
+            if recent_record is not None:
+                return jsonify({
+                    "success": False,
+                    "message": (
+                        "Bu araç için çok kısa süre önce bir teslim "
+                        "kaydı oluşturuldu."
+                    ),
+                }), 409
             start_mileage = mileage
             start_date = current_time
-            driver = user
-            act_type = action_type
+            driver_profile, driver_name, driver_error = resolve_driver(
+                data,
+                user,
+            )
+            if driver_error:
+                return jsonify({
+                    "success": False,
+                    "message": driver_error,
+                }), 400
+            driver_id = driver_profile.id if driver_profile else None
+            act_type = canonical_movement_type_name(action_type)
+            if act_type is None:
+                return jsonify({
+                    "success": False,
+                    "message": (
+                        "Geçerli ve aktif bir hareket türü seçmelisiniz."
+                    ),
+                }), 400
             n = notes
             resolved_request_no = request_no
             resolved_service_form_no = service_form_no
+            record_vehicle_id = vehicle.id if vehicle else None
         else:
-            start_mileage = active_trip.start_mileage
+            start_mileage = normalize_mileage(active_trip.start_mileage)
+            if start_mileage is None:
+                return jsonify({
+                    "success": False,
+                    "message": (
+                        "Aktif kaydın başlangıç kilometresi geçersiz. "
+                        "Yönetici desteği gerekiyor."
+                    ),
+                }), 409
             start_date = active_trip.start_date
-            driver = active_trip.driver
-            act_type = (
+            driver_name = active_trip.driver
+            driver_id = active_trip.driver_id
+            requested_act_type = (
                 active_trip.action_type
                 if active_trip.action_type != 'Diğer'
                 else action_type
             )
+            allow_inactive_type = active_trip.action_type != 'Diğer'
+            act_type = canonical_movement_type_name(
+                requested_act_type,
+                allow_inactive=allow_inactive_type,
+            )
+            if act_type is None and allow_inactive_type:
+                # Preserve closeability of a legacy/renamed type snapshot.
+                act_type = active_trip.action_type
+            if act_type is None:
+                return jsonify({
+                    "success": False,
+                    "message": (
+                        "Geçerli ve aktif bir hareket türü seçmelisiniz."
+                    ),
+                }), 400
             n = active_trip.notes + (" | " + notes if notes else "")
             resolved_request_no = active_trip.request_no or request_no
             resolved_service_form_no = (
                 active_trip.service_form_no or service_form_no
             )
-        
-        try:
-            dist = float(mileage) - float(start_mileage)
-            if dist < 0:
-                dist = 0
-        except (TypeError, ValueError):
-            dist = 0
+            record_vehicle_id = active_trip.vehicle_id or (
+                vehicle.id if vehicle else None
+            )
+
+        if mileage < start_mileage:
+            return jsonify({
+                "success": False,
+                "message": (
+                    f"Son KM ({mileage}), başlangıç KM değerinden "
+                    f"({start_mileage}) düşük olamaz."
+                ),
+            }), 400
+        if (
+            vehicle is not None
+            and vehicle.current_mileage is not None
+            and mileage < vehicle.current_mileage
+        ):
+            return jsonify({
+                "success": False,
+                "message": (
+                    f"Son KM ({mileage}), aracın son bilinen "
+                    f"KM değerinden ({vehicle.current_mileage}) düşük olamaz."
+                ),
+            }), 400
+        required_field_error = validate_required_movement_fields(
+            act_type,
+            resolved_request_no,
+            resolved_service_form_no,
+            allow_inactive=(
+                active_trip is not None
+                and active_trip.action_type != 'Diğer'
+            ),
+        )
+        if required_field_error:
+            return jsonify({
+                "success": False,
+                "message": required_field_error,
+            }), 400
+
+        distance = mileage - start_mileage
             
         record = MovementRecord(
+            vehicle_id=record_vehicle_id,
+            driver_id=driver_id,
             action_type=act_type,
             add_date=current_time,
             vehicle_name=(
@@ -595,22 +1050,41 @@ def save_record():
                 else vehicle_name
             ),
             plate=plate,
-            driver=driver,
+            driver=driver_name,
             start_mileage=str(start_mileage),
-            end_mileage=mileage,
+            end_mileage=str(mileage),
             start_date=start_date,
-            distance=str(dist),
+            distance=str(distance),
             end_date=current_time,
             notes=n.strip(" | "),
             request_no=resolved_request_no,
             service_form_no=resolved_service_form_no,
+            created_by=created_by,
         )
         db.session.add(record)
         if active_trip is not None:
             db.session.delete(active_trip)
-        db.session.commit()
-        return jsonify({"success": True, "message": f"{plate} işlemi tamamlandı. (Yapılan KM: {dist})"}), 201
-        
+        if vehicle is not None:
+            vehicle.current_mileage = mileage
+        try:
+            db.session.commit()
+        except IntegrityError:
+            db.session.rollback()
+            return jsonify({
+                "success": False,
+                "message": (
+                    "Bu araç hareketi başka bir işlem tarafından "
+                    "güncellendi; lütfen tekrar deneyin."
+                ),
+            }), 409
+        return jsonify({
+            "success": True,
+            "message": (
+                f"{plate} işlemi tamamlandı. "
+                f"(Yapılan KM: {distance})"
+            ),
+        }), 201
+
     return jsonify({"success": False, "message": "Geçersiz işlem."}), 400
 
 
@@ -691,6 +1165,14 @@ def manage_movement_types():
     movement_type = MovementType(
         name=name,
         description=description,
+        requires_request_no=parse_boolean(
+            data.get("requires_request_no"),
+            default=False,
+        ),
+        requires_service_form_no=parse_boolean(
+            data.get("requires_service_form_no"),
+            default=False,
+        ),
         active=parse_boolean(data.get("active"), default=True),
         sort_order=sort_order,
     )
@@ -770,6 +1252,14 @@ def update_movement_type(movement_type_id):
 
     movement_type.name = requested_name
     movement_type.description = requested_description
+    movement_type.requires_request_no = parse_boolean(
+        data.get("requires_request_no"),
+        default=movement_type.requires_request_no,
+    )
+    movement_type.requires_service_form_no = parse_boolean(
+        data.get("requires_service_form_no"),
+        default=movement_type.requires_service_form_no,
+    )
     movement_type.active = requested_active
     movement_type.sort_order = sort_order
     conflict = commit_catalog_change(
@@ -809,6 +1299,207 @@ def get_active_trips():
             "active": len(active_trips),
             "available": max(0, active_vehicle_count - registered_active_count),
         },
+    }), 200
+
+
+@app.route('/api/drivers', methods=['GET', 'POST'])
+@require_authenticated
+def manage_drivers():
+    if request.method == 'GET':
+        include_inactive = (
+            session.get("user") in ADMIN_USERS
+            and parse_boolean(
+                request.args.get("include_inactive"),
+                default=False,
+            )
+        )
+        statement = db.select(Driver)
+        if not include_inactive:
+            statement = statement.where(Driver.active.is_(True))
+        drivers = db.session.scalars(
+            statement.order_by(Driver.full_name, Driver.id)
+        ).all()
+        return jsonify({
+            "success": True,
+            "drivers": [serialize_driver(driver) for driver in drivers],
+        }), 200
+
+    if session.get("user") not in ADMIN_USERS:
+        return jsonify({
+            "success": False,
+            "message": "Bu işlem için yönetici yetkisi gerekiyor.",
+        }), 403
+
+    data = request.get_json(silent=True) or {}
+    full_name = " ".join(str(data.get("full_name") or "").strip().split())
+    employee_no = normalize_employee_no(data.get("employee_no"))
+    department = " ".join(
+        str(data.get("department") or "").strip().split()
+    )
+    phone = str(data.get("phone") or "").strip()
+    license_class = normalize_catalog_name(data.get("license_class"))
+    license_expiry_date = parse_optional_date(
+        data.get("license_expiry_date")
+    )
+    if not full_name:
+        return jsonify({
+            "success": False,
+            "message": "Sürücü adı zorunludur.",
+        }), 400
+    if len(full_name) > 120 or (
+        employee_no is not None and len(employee_no) > 50
+    ):
+        return jsonify({
+            "success": False,
+            "message": "Sürücü adı veya sicil numarası çok uzun.",
+        }), 400
+    if len(department) > 120 or len(phone) > 40 or len(license_class) > 40:
+        return jsonify({
+            "success": False,
+            "message": "Sürücü iletişim veya ehliyet bilgisi çok uzun.",
+        }), 400
+    if (
+        data.get("license_expiry_date") not in (None, "")
+        and license_expiry_date is None
+    ):
+        return jsonify({
+            "success": False,
+            "message": "Ehliyet geçerlilik tarihi YYYY-AA-GG olmalıdır.",
+        }), 400
+    if employee_no is not None:
+        duplicate = db.session.scalar(
+            db.select(Driver).where(
+                func.upper(Driver.employee_no) == employee_no
+            )
+        )
+        if duplicate is not None:
+            return jsonify({
+                "success": False,
+                "message": "Bu sicil numarası zaten kayıtlı.",
+            }), 409
+
+    driver = Driver(
+        employee_no=employee_no,
+        full_name=full_name,
+        department=department,
+        phone=phone,
+        license_class=license_class,
+        license_expiry_date=license_expiry_date,
+        active=parse_boolean(data.get("active"), default=True),
+    )
+    db.session.add(driver)
+    conflict = commit_catalog_change(
+        "Bu sürücü başka bir işlemde kaydedilmiş.",
+    )
+    if conflict is not None:
+        return conflict
+    return jsonify({
+        "success": True,
+        "message": "Sürücü kaydedildi.",
+        "driver": serialize_driver(driver),
+    }), 201
+
+
+@app.route('/api/drivers/<int:driver_id>', methods=['PATCH'])
+@require_admin
+def update_driver(driver_id):
+    driver = db.session.get(Driver, driver_id)
+    if driver is None:
+        return jsonify({
+            "success": False,
+            "message": "Sürücü bulunamadı.",
+        }), 404
+
+    data = request.get_json(silent=True) or {}
+    full_name = " ".join(
+        str(data.get("full_name", driver.full_name)).strip().split()
+    )
+    employee_no = normalize_employee_no(
+        data.get("employee_no", driver.employee_no)
+    )
+    department = " ".join(
+        str(data.get("department", driver.department) or "").strip().split()
+    )
+    phone = str(data.get("phone", driver.phone) or "").strip()
+    license_class = normalize_catalog_name(
+        data.get("license_class", driver.license_class)
+    )
+    raw_license_expiry = data.get(
+        "license_expiry_date",
+        (
+            driver.license_expiry_date.isoformat()
+            if driver.license_expiry_date
+            else ""
+        ),
+    )
+    license_expiry_date = parse_optional_date(raw_license_expiry)
+    requested_active = parse_boolean(
+        data.get("active"),
+        default=driver.active,
+    )
+    if not full_name:
+        return jsonify({
+            "success": False,
+            "message": "Sürücü adı zorunludur.",
+        }), 400
+    if len(full_name) > 120 or (
+        employee_no is not None and len(employee_no) > 50
+    ):
+        return jsonify({
+            "success": False,
+            "message": "Sürücü adı veya sicil numarası çok uzun.",
+        }), 400
+    if len(department) > 120 or len(phone) > 40 or len(license_class) > 40:
+        return jsonify({
+            "success": False,
+            "message": "Sürücü iletişim veya ehliyet bilgisi çok uzun.",
+        }), 400
+    if raw_license_expiry not in (None, "") and license_expiry_date is None:
+        return jsonify({
+            "success": False,
+            "message": "Ehliyet geçerlilik tarihi YYYY-AA-GG olmalıdır.",
+        }), 400
+    if not requested_active:
+        active_trip = db.session.scalar(
+            db.select(ActiveTrip).where(ActiveTrip.driver_id == driver.id)
+        )
+        if active_trip is not None:
+            return jsonify({
+                "success": False,
+                "message": (
+                    "Devam eden araç kullanımı olan sürücü "
+                    "pasifleştirilemez."
+                ),
+            }), 409
+    if employee_no is not None:
+        duplicate = db.session.scalar(
+            db.select(Driver).where(
+                func.upper(Driver.employee_no) == employee_no,
+                Driver.id != driver.id,
+            )
+        )
+        if duplicate is not None:
+            return jsonify({
+                "success": False,
+                "message": "Bu sicil numarası başka bir sürücüde kayıtlı.",
+            }), 409
+
+    driver.employee_no = employee_no
+    driver.full_name = full_name
+    driver.department = department
+    driver.phone = phone
+    driver.license_class = license_class
+    driver.license_expiry_date = license_expiry_date
+    driver.active = requested_active
+    conflict = commit_catalog_change(
+        "Bu sürücü başka bir işlemde güncellenmiş.",
+    )
+    if conflict is not None:
+        return conflict
+    return jsonify({
+        "success": True,
+        "message": "Sürücü güncellendi.",
+        "driver": serialize_driver(driver),
     }), 200
 
 
@@ -1061,6 +1752,15 @@ def manage_vehicles():
             "success": False,
             "message": "Araç yılı geçerli bir sayı olmalıdır.",
         }), 400
+    current_mileage = normalize_mileage(data.get("current_mileage"))
+    if (
+        data.get("current_mileage") not in (None, "")
+        and current_mileage is None
+    ):
+        return jsonify({
+            "success": False,
+            "message": "Güncel KM sıfır veya daha büyük tam sayı olmalıdır.",
+        }), 400
     if plate is None:
         return jsonify({
             "success": False,
@@ -1089,9 +1789,19 @@ def manage_vehicles():
         plate=plate,
         model_id=vehicle_model.id,
         year=year,
+        current_mileage=current_mileage,
         active=parse_boolean(data.get("active"), default=True),
     )
     db.session.add(vehicle)
+    try:
+        db.session.flush()
+    except IntegrityError:
+        db.session.rollback()
+        return jsonify({
+            "success": False,
+            "message": "Bu plaka başka bir işlemde kaydedilmiş.",
+        }), 409
+    link_vehicle_history(vehicle)
     conflict = commit_catalog_change(
         "Bu plaka başka bir işlemde kaydedilmiş.",
     )
@@ -1123,6 +1833,33 @@ def update_vehicle(vehicle_id):
         data.get("active"),
         default=vehicle.active,
     )
+    if "current_mileage" in data:
+        requested_current_mileage = normalize_mileage(
+            data.get("current_mileage")
+        )
+        if (
+            data.get("current_mileage") in (None, "")
+            and vehicle.current_mileage is not None
+        ):
+            return jsonify({
+                "success": False,
+                "message": (
+                    "Güncel KM bilgisi bilinen bir araçta bu değer "
+                    "silinemez."
+                ),
+            }), 400
+        if (
+            data.get("current_mileage") not in (None, "")
+            and requested_current_mileage is None
+        ):
+            return jsonify({
+                "success": False,
+                "message": (
+                    "Güncel KM sıfır veya daha büyük tam sayı olmalıdır."
+                ),
+            }), 400
+    else:
+        requested_current_mileage = vehicle.current_mileage
     try:
         requested_year = (
             int(data.get("year"))
@@ -1158,6 +1895,31 @@ def update_vehicle(vehicle_id):
             "success": False,
             "message": "Devam eden kullanımı olan aracın plakası veya aktifliği değiştirilemez.",
         }), 409
+    if (
+        requested_current_mileage is not None
+        and vehicle.current_mileage is not None
+        and requested_current_mileage < vehicle.current_mileage
+    ):
+        return jsonify({
+            "success": False,
+            "message": (
+                "Güncel KM, aracın son bilinen KM değerinden düşük olamaz."
+            ),
+        }), 400
+    if active_trip is not None:
+        active_start_mileage = normalize_mileage(active_trip.start_mileage)
+        if (
+            requested_current_mileage is not None
+            and active_start_mileage is not None
+            and requested_current_mileage < active_start_mileage
+        ):
+            return jsonify({
+                "success": False,
+                "message": (
+                    "Güncel KM, devam eden kullanımın başlangıç "
+                    "KM değerinden düşük olamaz."
+                ),
+            }), 400
     duplicate = db.session.scalar(
         db.select(Vehicle).where(
             Vehicle.plate == requested_plate,
@@ -1173,6 +1935,7 @@ def update_vehicle(vehicle_id):
     vehicle.plate = requested_plate
     vehicle.model_id = vehicle_model.id
     vehicle.year = requested_year
+    vehicle.current_mileage = requested_current_mileage
     vehicle.active = requested_active
     conflict = commit_catalog_change(
         "Bu araç başka bir işlemde güncellenmiş.",
@@ -1209,6 +1972,230 @@ def get_management_catalog():
             serialize_database_vehicle(vehicle)
             for vehicle in vehicles
         ],
+    }), 200
+
+
+@app.route('/api/maintenance-reminders', methods=['GET', 'POST'])
+@require_authenticated
+def manage_maintenance_reminders():
+    if request.method == 'GET':
+        statement = db.select(VehicleReminder)
+        vehicle_id = parse_optional_int(request.args.get("vehicle_id"))
+        if vehicle_id is not None:
+            statement = statement.where(
+                VehicleReminder.vehicle_id == vehicle_id
+            )
+        if not (
+            session.get("user") in ADMIN_USERS
+            and parse_boolean(
+                request.args.get("include_inactive"),
+                default=False,
+            )
+        ):
+            statement = statement.where(VehicleReminder.active.is_(True))
+        reminders = db.session.scalars(
+            statement.order_by(VehicleReminder.id.desc())
+        ).all()
+        items = [
+            serialize_vehicle_reminder(reminder)
+            for reminder in reminders
+        ]
+        requested_status = str(
+            request.args.get("status") or ""
+        ).strip().lower()
+        if requested_status:
+            items = [
+                item
+                for item in items
+                if item["status_key"] == requested_status
+            ]
+        status_priority = {
+            "overdue": 0,
+            "due_soon": 1,
+            "upcoming": 2,
+            "completed": 3,
+            "inactive": 4,
+        }
+        items.sort(key=lambda item: (
+            status_priority.get(item["status_key"], 9),
+            item["due_date"] or "9999-12-31",
+            (
+                item["due_mileage"]
+                if item["due_mileage"] is not None
+                else 2_147_483_647
+            ),
+            item["id"],
+        ))
+        counts = {
+            status_key: 0
+            for status_key in status_priority
+        }
+        for reminder in reminders:
+            status_key, _ = get_reminder_status(reminder)
+            counts[status_key] = counts.get(status_key, 0) + 1
+        counts["total"] = len(reminders)
+        return jsonify({
+            "success": True,
+            "reminders": items,
+            "items": items,
+            "counts": counts,
+            "thresholds": {
+                "upcoming_days": REMINDER_UPCOMING_DAYS,
+                "upcoming_mileage": REMINDER_UPCOMING_MILEAGE,
+            },
+        }), 200
+
+    if session.get("user") not in ADMIN_USERS:
+        return jsonify({
+            "success": False,
+            "message": "Bu işlem için yönetici yetkisi gerekiyor.",
+        }), 403
+
+    data = request.get_json(silent=True) or {}
+    vehicle_id = parse_optional_int(data.get("vehicle_id"))
+    vehicle = db.session.get(Vehicle, vehicle_id) if vehicle_id else None
+    reminder_type = " ".join(
+        str(data.get("reminder_type") or "").strip().split()
+    )
+    title = " ".join(str(data.get("title") or "").strip().split())
+    raw_due_date = data.get("due_date")
+    due_date = parse_optional_date(raw_due_date)
+    due_mileage = normalize_mileage(data.get("due_mileage"))
+    notes = str(data.get("notes") or "").strip()
+    if vehicle is None:
+        return jsonify({
+            "success": False,
+            "message": "Geçerli bir araç seçmelisiniz.",
+        }), 400
+    if not reminder_type or not title:
+        return jsonify({
+            "success": False,
+            "message": "Hatırlatma türü ve başlığı zorunludur.",
+        }), 400
+    if len(reminder_type) > 80 or len(title) > 160:
+        return jsonify({
+            "success": False,
+            "message": "Hatırlatma türü veya başlığı çok uzun.",
+        }), 400
+    if raw_due_date not in (None, "") and due_date is None:
+        return jsonify({
+            "success": False,
+            "message": "Hatırlatma tarihi YYYY-AA-GG olmalıdır.",
+        }), 400
+    if data.get("due_mileage") not in (None, "") and due_mileage is None:
+        return jsonify({
+            "success": False,
+            "message": "Hatırlatma KM değeri geçerli bir tam sayı olmalıdır.",
+        }), 400
+    if due_date is None and due_mileage is None:
+        return jsonify({
+            "success": False,
+            "message": "Tarih veya KM hedeflerinden en az biri girilmelidir.",
+        }), 400
+
+    reminder = VehicleReminder(
+        vehicle_id=vehicle.id,
+        reminder_type=reminder_type,
+        title=title,
+        due_date=due_date,
+        due_mileage=due_mileage,
+        notes=notes,
+        active=parse_boolean(data.get("active"), default=True),
+    )
+    if parse_boolean(data.get("completed"), default=False):
+        reminder.completed_at = now_utc()
+    db.session.add(reminder)
+    db.session.commit()
+    return jsonify({
+        "success": True,
+        "message": "Bakım hatırlatması kaydedildi.",
+        "reminder": serialize_vehicle_reminder(reminder),
+    }), 201
+
+
+@app.route('/api/maintenance-reminders/<int:reminder_id>', methods=['PATCH'])
+@require_admin
+def update_maintenance_reminder(reminder_id):
+    reminder = db.session.get(VehicleReminder, reminder_id)
+    if reminder is None:
+        return jsonify({
+            "success": False,
+            "message": "Bakım hatırlatması bulunamadı.",
+        }), 404
+    data = request.get_json(silent=True) or {}
+
+    vehicle_id = parse_optional_int(
+        data.get("vehicle_id", reminder.vehicle_id)
+    )
+    vehicle = db.session.get(Vehicle, vehicle_id) if vehicle_id else None
+    reminder_type = " ".join(
+        str(
+            data.get("reminder_type", reminder.reminder_type) or ""
+        ).strip().split()
+    )
+    title = " ".join(
+        str(data.get("title", reminder.title) or "").strip().split()
+    )
+    raw_due_date = data.get(
+        "due_date",
+        reminder.due_date.isoformat() if reminder.due_date else "",
+    )
+    due_date = parse_optional_date(raw_due_date)
+    raw_due_mileage = data.get("due_mileage", reminder.due_mileage)
+    due_mileage = normalize_mileage(raw_due_mileage)
+    notes = str(data.get("notes", reminder.notes) or "").strip()
+    if vehicle is None:
+        return jsonify({
+            "success": False,
+            "message": "Geçerli bir araç seçmelisiniz.",
+        }), 400
+    if not reminder_type or not title:
+        return jsonify({
+            "success": False,
+            "message": "Hatırlatma türü ve başlığı zorunludur.",
+        }), 400
+    if len(reminder_type) > 80 or len(title) > 160:
+        return jsonify({
+            "success": False,
+            "message": "Hatırlatma türü veya başlığı çok uzun.",
+        }), 400
+    if raw_due_date not in (None, "") and due_date is None:
+        return jsonify({
+            "success": False,
+            "message": "Hatırlatma tarihi YYYY-AA-GG olmalıdır.",
+        }), 400
+    if raw_due_mileage not in (None, "") and due_mileage is None:
+        return jsonify({
+            "success": False,
+            "message": "Hatırlatma KM değeri geçerli bir tam sayı olmalıdır.",
+        }), 400
+    if due_date is None and due_mileage is None:
+        return jsonify({
+            "success": False,
+            "message": "Tarih veya KM hedeflerinden en az biri girilmelidir.",
+        }), 400
+
+    reminder.vehicle_id = vehicle.id
+    reminder.reminder_type = reminder_type
+    reminder.title = title
+    reminder.due_date = due_date
+    reminder.due_mileage = due_mileage
+    reminder.notes = notes
+    reminder.active = parse_boolean(
+        data.get("active"),
+        default=reminder.active,
+    )
+    if "completed" in data:
+        reminder.completed_at = (
+            now_utc()
+            if parse_boolean(data.get("completed"), default=False)
+            else None
+        )
+    db.session.commit()
+    return jsonify({
+        "success": True,
+        "message": "Bakım hatırlatması güncellendi.",
+        "reminder": serialize_vehicle_reminder(reminder),
     }), 200
 
 
@@ -1539,6 +2526,342 @@ def gemini_ocr():
             "fallback_available": True,
         }), 502
 
+def parse_report_filters(args):
+    raw_date_from = str(args.get("date_from") or "").strip()
+    raw_date_to = str(args.get("date_to") or "").strip()
+    date_from = parse_optional_date(raw_date_from)
+    date_to = parse_optional_date(raw_date_to)
+    if raw_date_from and date_from is None:
+        return None, "Başlangıç tarihi YYYY-AA-GG olmalıdır."
+    if raw_date_to and date_to is None:
+        return None, "Bitiş tarihi YYYY-AA-GG olmalıdır."
+    if date_from and date_to and date_from > date_to:
+        return None, "Başlangıç tarihi bitiş tarihinden sonra olamaz."
+
+    integer_filters = {}
+    for key in ("driver_id", "brand_id", "model_id", "vehicle_id"):
+        raw_value = args.get(key)
+        parsed_value = parse_optional_int(raw_value)
+        if raw_value not in (None, "") and parsed_value is None:
+            return None, f"{key} filtresi geçerli bir sayı olmalıdır."
+        integer_filters[key] = parsed_value
+
+    raw_status = str(args.get("status") or "all").strip().lower()
+    status_aliases = {
+        "": "all",
+        "all": "all",
+        "tümü": "all",
+        "active": "active",
+        "aktif": "active",
+        "completed": "completed",
+        "tamamlandı": "completed",
+    }
+    status = status_aliases.get(raw_status)
+    if status is None:
+        return None, "Durum filtresi all, active veya completed olmalıdır."
+    sort_mode = str(args.get("sort") or "date-desc").strip().lower()
+    allowed_sort_modes = {
+        "date-desc",
+        "date-asc",
+        "distance-desc",
+        "distance-asc",
+        "plate-asc",
+        "plate-desc",
+        "driver-asc",
+        "driver-desc",
+    }
+    if sort_mode not in allowed_sort_modes:
+        return None, "Geçersiz rapor sıralaması."
+
+    filters = {
+        **integer_filters,
+        "date_from": date_from,
+        "date_to": date_to,
+        "status": status,
+        "sort": sort_mode,
+        "action_type": str(
+            args.get("action_type")
+            or args.get("movement_type")
+            or ""
+        ).strip(),
+        "search": str(args.get("search") or "").strip()[:200],
+        "plate": re.sub(
+            r"[^A-Z0-9]",
+            "",
+            str(args.get("plate") or "").upper(),
+        ),
+    }
+    return filters, None
+
+
+def apply_report_filters(statement, model, filters):
+    if filters["date_from"] is not None:
+        start_at = datetime.combine(
+            filters["date_from"],
+            time.min,
+            tzinfo=APP_TIMEZONE,
+        ).astimezone(timezone.utc)
+        statement = statement.where(model.start_date >= start_at)
+    if filters["date_to"] is not None:
+        end_at = datetime.combine(
+            filters["date_to"] + timedelta(days=1),
+            time.min,
+            tzinfo=APP_TIMEZONE,
+        ).astimezone(timezone.utc)
+        statement = statement.where(model.start_date < end_at)
+    if filters["driver_id"] is not None:
+        statement = statement.where(
+            model.driver_id == filters["driver_id"]
+        )
+    if filters["vehicle_id"] is not None:
+        statement = statement.where(
+            model.vehicle_id == filters["vehicle_id"]
+        )
+    if filters["plate"]:
+        statement = statement.where(
+            func.upper(model.plate).contains(filters["plate"])
+        )
+    if filters["action_type"]:
+        statement = statement.where(
+            model.action_type == filters["action_type"]
+        )
+    if filters["search"]:
+        search_value = filters["search"].lower()
+        statement = statement.where(or_(
+            func.lower(model.plate).contains(search_value),
+            func.lower(model.vehicle_name).contains(search_value),
+            func.lower(model.driver).contains(search_value),
+            func.lower(model.request_no).contains(search_value),
+            func.lower(model.service_form_no).contains(search_value),
+            func.lower(model.notes).contains(search_value),
+        ))
+
+    if filters["brand_id"] is not None or filters["model_id"] is not None:
+        statement = statement.join(
+            Vehicle,
+            model.vehicle_id == Vehicle.id,
+        )
+        if filters["model_id"] is not None:
+            statement = statement.where(
+                Vehicle.model_id == filters["model_id"]
+            )
+        if filters["brand_id"] is not None:
+            statement = statement.join(
+                VehicleModel,
+                Vehicle.model_id == VehicleModel.id,
+            ).where(
+                VehicleModel.brand_id == filters["brand_id"]
+            )
+    return statement
+
+
+def serialize_active_trip_report(active_trip):
+    item = serialize_active_trip(active_trip)
+    return {
+        **item,
+        "status": "Aktif",
+        "status_key": "active",
+        "add_date": item["start_date"],
+        "end_mileage": "",
+        "distance": "",
+        "end_date": "",
+    }
+
+
+def get_report_ordering(model, sort_mode):
+    descending = sort_mode.endswith("-desc")
+    if sort_mode.startswith("distance-"):
+        sort_column = (
+            cast(model.distance, Numeric(20, 6))
+            if hasattr(model, "distance")
+            else literal(0)
+        )
+    elif sort_mode.startswith("plate-"):
+        sort_column = func.lower(model.plate)
+    elif sort_mode.startswith("driver-"):
+        sort_column = func.lower(model.driver)
+    else:
+        sort_column = model.start_date
+    direction = sort_column.desc() if descending else sort_column.asc()
+    id_direction = model.id.desc() if descending else model.id.asc()
+    return direction, id_direction
+
+
+def build_advanced_report_records(args, max_records=5000):
+    filters, error = parse_report_filters(args)
+    if error:
+        return None, None, error
+
+    items = []
+    if filters["status"] in {"all", "completed"}:
+        statement = apply_report_filters(
+            db.select(MovementRecord),
+            MovementRecord,
+            filters,
+        ).order_by(*get_report_ordering(
+            MovementRecord,
+            filters["sort"],
+        ))
+        if max_records is not None:
+            statement = statement.limit(max_records)
+        completed_records = db.session.scalars(statement).all()
+        items.extend(
+            serialize_movement_record(record)
+            for record in completed_records
+        )
+    if filters["status"] in {"all", "active"}:
+        statement = apply_report_filters(
+            db.select(ActiveTrip),
+            ActiveTrip,
+            filters,
+        ).order_by(*get_report_ordering(
+            ActiveTrip,
+            filters["sort"],
+        ))
+        if max_records is not None:
+            statement = statement.limit(max_records)
+        active_trips = db.session.scalars(statement).all()
+        items.extend(
+            serialize_active_trip_report(active_trip)
+            for active_trip in active_trips
+        )
+
+    sort_mode = filters["sort"]
+    if sort_mode.startswith("distance-"):
+        sort_key = lambda item: normalize_mileage(item.get("distance")) or 0
+    elif sort_mode.startswith("plate-"):
+        sort_key = lambda item: str(item.get("plate") or "").casefold()
+    elif sort_mode.startswith("driver-"):
+        sort_key = lambda item: str(item.get("driver") or "").casefold()
+    else:
+        sort_key = lambda item: ensure_aware_utc(
+            datetime.fromisoformat(item["start_at"])
+            if item.get("start_at")
+            else parse_legacy_datetime(item["start_date"])
+        )
+    items.sort(key=sort_key, reverse=sort_mode.endswith("-desc"))
+    if max_records is not None:
+        items = items[:max_records]
+    filters_payload = {
+        key: value.isoformat() if isinstance(value, date) else value
+        for key, value in filters.items()
+    }
+    return items, filters_payload, None
+
+
+@app.route('/api/reports/filter-options', methods=['GET'])
+@require_authenticated
+def get_report_filter_options():
+    drivers = db.session.scalars(
+        db.select(Driver).order_by(Driver.full_name, Driver.id)
+    ).all()
+    brands = db.session.scalars(
+        db.select(Brand).order_by(Brand.name, Brand.id)
+    ).all()
+    vehicle_models = db.session.scalars(
+        db.select(VehicleModel).order_by(
+            VehicleModel.brand_id,
+            VehicleModel.name,
+            VehicleModel.id,
+        )
+    ).all()
+    return jsonify({
+        "success": True,
+        "drivers": [
+            {
+                "id": driver.id,
+                "employee_no": driver.employee_no or "",
+                "full_name": driver.full_name,
+                "active": driver.active,
+            }
+            for driver in drivers
+        ],
+        "brands": [serialize_brand(brand) for brand in brands],
+        "models": [
+            serialize_vehicle_model(vehicle_model)
+            for vehicle_model in vehicle_models
+        ],
+    }), 200
+
+
+@app.route('/api/reports/advanced', methods=['GET'])
+@require_authenticated
+def get_advanced_reports():
+    items, filters, error = build_advanced_report_records(
+        request.args,
+        max_records=REPORT_API_MAX_RECORDS + 1,
+    )
+    if error:
+        return jsonify({"success": False, "message": error}), 400
+    truncated = len(items) > REPORT_API_MAX_RECORDS
+    if truncated:
+        items = items[:REPORT_API_MAX_RECORDS]
+    completed_count = sum(
+        1 for item in items if item["status_key"] == "completed"
+    )
+    active_count = sum(
+        1 for item in items if item["status_key"] == "active"
+    )
+    total_distance = sum(
+        normalize_mileage(item.get("distance")) or 0
+        for item in items
+    )
+    return jsonify({
+        "success": True,
+        "records": items,
+        "filters": filters,
+        "counts": {
+            "total": len(items),
+            "completed": completed_count,
+            "active": active_count,
+        },
+        "total_distance": total_distance,
+        "truncated": truncated,
+        "record_limit": REPORT_API_MAX_RECORDS,
+    }), 200
+
+
+@app.route('/api/reports/export', methods=['GET'])
+@require_authenticated
+def export_advanced_reports():
+    export_format = str(
+        request.args.get("format") or "csv"
+    ).strip().lower()
+    exporter_config = REPORT_EXPORT_FORMATS.get(export_format)
+    if exporter_config is None:
+        return jsonify({
+            "success": False,
+            "message": "Dışa aktarma biçimi csv, xlsx veya pdf olmalıdır.",
+        }), 400
+    items, _filters, error = build_advanced_report_records(
+        request.args,
+        max_records=REPORT_EXPORT_MAX_RECORDS + 1,
+    )
+    if error:
+        return jsonify({"success": False, "message": error}), 400
+    if len(items) > REPORT_EXPORT_MAX_RECORDS:
+        return jsonify({
+            "success": False,
+            "message": (
+                f"Tek dosyada en fazla {REPORT_EXPORT_MAX_RECORDS} kayıt "
+                "indirilebilir; lütfen filtreleri daraltın."
+            ),
+        }), 413
+    exporter, mimetype, extension = exporter_config
+    payload = exporter(items)
+    filename = (
+        f"arac-hareket-raporu-"
+        f"{datetime.now(APP_TIMEZONE).strftime('%Y%m%d-%H%M')}.{extension}"
+    )
+    return send_file(
+        io.BytesIO(payload),
+        mimetype=mimetype,
+        as_attachment=True,
+        download_name=filename,
+        max_age=0,
+    )
+
+
 @app.route('/api/reports/recent', methods=['GET'])
 def get_recent_reports():
     records = db.session.scalars(
@@ -1574,82 +2897,193 @@ def get_plate_reports(plate):
 
 def initialize_database():
     db.create_all()
+    ensure_schema_extensions(db)
+    if db.engine.dialect.name == "postgresql":
+        db.session.execute(
+            text(
+                "SELECT pg_advisory_xact_lock("
+                "hashtext(:initialization_lock))"
+            ),
+            {"initialization_lock": "arac_plaka_database_seed"},
+        )
+
     seed_marker = db.session.get(AppSetting, "initial_seed_v1")
-    if seed_marker is not None:
-        return
-
-    for sort_order, purpose_name in enumerate(VEHICLE_USAGE_PURPOSES, start=1):
-        movement_type = db.session.scalar(
-            db.select(MovementType).where(MovementType.name == purpose_name)
-        )
-        if movement_type is None:
-            db.session.add(MovementType(
-                name=purpose_name,
-                description=VEHICLE_USAGE_PURPOSE_DESCRIPTIONS.get(
-                    purpose_name,
-                    "",
-                ),
-                active=True,
-                sort_order=sort_order,
-            ))
-
-    for plate, details in VEHICLES_DB.items():
-        brand_name = normalize_catalog_name(details.get("brand"))
-        model_name = normalize_catalog_name(details.get("model"))
-        brand = db.session.scalar(
-            db.select(Brand).where(Brand.name == brand_name)
-        )
-        if brand is None:
-            brand = Brand(name=brand_name, active=True)
-            db.session.add(brand)
-            db.session.flush()
-        vehicle_model = db.session.scalar(
-            db.select(VehicleModel).where(
-                VehicleModel.brand_id == brand.id,
-                VehicleModel.name == model_name,
+    if seed_marker is None:
+        for sort_order, purpose_name in enumerate(
+            VEHICLE_USAGE_PURPOSES,
+            start=1,
+        ):
+            movement_type = db.session.scalar(
+                db.select(MovementType).where(
+                    MovementType.name == purpose_name
+                )
             )
-        )
-        if vehicle_model is None:
-            vehicle_model = VehicleModel(
-                brand_id=brand.id,
-                name=model_name,
-                active=True,
+            if movement_type is None:
+                db.session.add(MovementType(
+                    name=purpose_name,
+                    description=VEHICLE_USAGE_PURPOSE_DESCRIPTIONS.get(
+                        purpose_name,
+                        "",
+                    ),
+                    active=True,
+                    sort_order=sort_order,
+                ))
+
+        for plate, details in VEHICLES_DB.items():
+            brand_name = normalize_catalog_name(details.get("brand"))
+            model_name = normalize_catalog_name(details.get("model"))
+            brand = db.session.scalar(
+                db.select(Brand).where(Brand.name == brand_name)
             )
-            db.session.add(vehicle_model)
-            db.session.flush()
-        existing_vehicle = db.session.scalar(
-            db.select(Vehicle).where(Vehicle.plate == plate)
+            if brand is None:
+                brand = Brand(name=brand_name, active=True)
+                db.session.add(brand)
+                db.session.flush()
+            vehicle_model = db.session.scalar(
+                db.select(VehicleModel).where(
+                    VehicleModel.brand_id == brand.id,
+                    VehicleModel.name == model_name,
+                )
+            )
+            if vehicle_model is None:
+                vehicle_model = VehicleModel(
+                    brand_id=brand.id,
+                    name=model_name,
+                    active=True,
+                )
+                db.session.add(vehicle_model)
+                db.session.flush()
+            existing_vehicle = db.session.scalar(
+                db.select(Vehicle).where(Vehicle.plate == plate)
+            )
+            if existing_vehicle is None:
+                db.session.add(Vehicle(
+                    plate=plate,
+                    model_id=vehicle_model.id,
+                    year=details.get("year"),
+                    active=True,
+                ))
+
+        existing_record_count = db.session.scalar(
+            db.select(func.count(MovementRecord.id))
+        ) or 0
+        if existing_record_count == 0:
+            for record in RECORDS_DB:
+                db.session.add(MovementRecord(
+                    action_type=record["action_type"],
+                    add_date=parse_legacy_datetime(record["add_date"]),
+                    vehicle_name=record["vehicle_name"],
+                    plate=record["plate"],
+                    driver=record["driver"],
+                    request_no=record.get("request_no", ""),
+                    service_form_no=record.get("service_form_no", ""),
+                    start_mileage=str(record["start_mileage"]),
+                    end_mileage=str(record["end_mileage"]),
+                    start_date=parse_legacy_datetime(record["start_date"]),
+                    distance=str(record["distance"]),
+                    end_date=parse_legacy_datetime(record["end_date"]),
+                    notes=record.get("notes", ""),
+                ))
+
+        db.session.add(AppSetting(key="initial_seed_v1", value="complete"))
+        db.session.flush()
+
+    extension_marker = db.session.get(AppSetting, "feature_seed_v2")
+    if extension_marker is None:
+        for movement_name, rules in VEHICLE_USAGE_PURPOSE_FIELD_RULES.items():
+            movement_type = db.session.scalar(
+                db.select(MovementType).where(
+                    MovementType.name == movement_name
+                )
+            )
+            if movement_type is not None:
+                movement_type.requires_request_no = rules[
+                    "requires_request_no"
+                ]
+                movement_type.requires_service_form_no = rules[
+                    "requires_service_form_no"
+                ]
+
+        vehicles = db.session.scalars(db.select(Vehicle)).all()
+        vehicles_by_plate = {
+            vehicle.plate: vehicle
+            for vehicle in vehicles
+        }
+        movement_records = db.session.scalars(
+            db.select(MovementRecord)
+        ).all()
+        active_trips = db.session.scalars(db.select(ActiveTrip)).all()
+        for record in movement_records:
+            vehicle = vehicles_by_plate.get(record.plate)
+            if vehicle is None:
+                continue
+            if record.vehicle_id is None:
+                record.vehicle_id = vehicle.id
+            end_mileage = normalize_mileage(record.end_mileage)
+            if end_mileage is not None:
+                vehicle.current_mileage = max(
+                    vehicle.current_mileage or 0,
+                    end_mileage,
+                )
+        for active_trip in active_trips:
+            vehicle = vehicles_by_plate.get(active_trip.plate)
+            if vehicle is None:
+                continue
+            if active_trip.vehicle_id is None:
+                active_trip.vehicle_id = vehicle.id
+            start_mileage = normalize_mileage(active_trip.start_mileage)
+            if start_mileage is not None:
+                vehicle.current_mileage = max(
+                    vehicle.current_mileage or 0,
+                    start_mileage,
+                )
+
+        driver_names = {
+            str(name or "").strip()
+            for name in USERS_DB
+        }
+        driver_names.update(
+            str(record.driver or "").strip()
+            for record in movement_records
         )
-        if existing_vehicle is None:
-            db.session.add(Vehicle(
-                plate=plate,
-                model_id=vehicle_model.id,
-                year=details.get("year"),
-                active=True,
-            ))
+        driver_names.update(
+            str(active_trip.driver or "").strip()
+            for active_trip in active_trips
+        )
+        for driver_name in sorted(name for name in driver_names if name):
+            existing_driver = db.session.scalar(
+                db.select(Driver).where(
+                    func.lower(Driver.full_name) == driver_name.lower()
+                )
+            )
+            if existing_driver is None:
+                db.session.add(Driver(
+                    full_name=driver_name,
+                    active=True,
+                ))
+        db.session.flush()
 
-    existing_record_count = db.session.scalar(
-        db.select(func.count(MovementRecord.id))
-    ) or 0
-    if existing_record_count == 0:
-        for record in RECORDS_DB:
-            db.session.add(MovementRecord(
-                action_type=record["action_type"],
-                add_date=parse_legacy_datetime(record["add_date"]),
-                vehicle_name=record["vehicle_name"],
-                plate=record["plate"],
-                driver=record["driver"],
-                request_no=record.get("request_no", ""),
-                service_form_no=record.get("service_form_no", ""),
-                start_mileage=str(record["start_mileage"]),
-                end_mileage=str(record["end_mileage"]),
-                start_date=parse_legacy_datetime(record["start_date"]),
-                distance=str(record["distance"]),
-                end_date=parse_legacy_datetime(record["end_date"]),
-                notes=record.get("notes", ""),
-            ))
+        drivers_by_name = {
+            driver.full_name.casefold(): driver
+            for driver in db.session.scalars(db.select(Driver)).all()
+        }
+        for record in movement_records:
+            if record.driver_id is None:
+                driver = drivers_by_name.get(
+                    str(record.driver or "").casefold()
+                )
+                if driver is not None:
+                    record.driver_id = driver.id
+        for active_trip in active_trips:
+            if active_trip.driver_id is None:
+                driver = drivers_by_name.get(
+                    str(active_trip.driver or "").casefold()
+                )
+                if driver is not None:
+                    active_trip.driver_id = driver.id
 
-    db.session.add(AppSetting(key="initial_seed_v1", value="complete"))
+        db.session.add(AppSetting(key="feature_seed_v2", value="complete"))
+
     db.session.commit()
 
 

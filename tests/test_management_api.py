@@ -11,9 +11,11 @@ from models import (
     ActiveTrip,
     AppSetting,
     Brand,
+    Driver,
     MovementRecord,
     MovementType,
     Vehicle,
+    VehicleReminder,
     VehicleModel,
     db,
 )
@@ -26,6 +28,8 @@ SEEDED_MODELS = (
     MovementType,
     ActiveTrip,
     MovementRecord,
+    Driver,
+    VehicleReminder,
     AppSetting,
 )
 
@@ -352,7 +356,7 @@ class ManagementApiTests(unittest.TestCase):
                 "plate": "34KM4969",
                 "action": "pickup",
                 "action_type": "Müşteri Ziyareti",
-                "mileage": "100",
+                "mileage": "193400",
                 "user": "kullanici",
                 "request_no": "TAL-77",
                 "service_form_no": "",
@@ -367,7 +371,7 @@ class ManagementApiTests(unittest.TestCase):
                     "plate": "34KM4969",
                     "action": "pickup",
                     "action_type": "Diğer",
-                    "mileage": "101",
+                    "mileage": "193401",
                     "user": "kullanici",
                 },
             ).status_code,
@@ -405,7 +409,7 @@ class ManagementApiTests(unittest.TestCase):
                 "plate": "34KM4969",
                 "action": "dropoff",
                 "action_type": "Diğer",
-                "mileage": "125",
+                "mileage": "193425",
                 "user": "kullanici",
                 "notes": "Teslim",
             },
@@ -428,7 +432,7 @@ class ManagementApiTests(unittest.TestCase):
                 .order_by(MovementRecord.id.desc())
             )
             self.assertEqual(record.action_type, "Müşteri Ziyareti")
-            self.assertEqual(record.distance, "25.0")
+            self.assertEqual(record.distance, "25")
             self.assertEqual(record.request_no, "TAL-77")
 
     def test_database_seed_is_idempotent(self):
@@ -449,7 +453,9 @@ class ManagementApiTests(unittest.TestCase):
         self.assertEqual(before["MovementType"], 7)
         self.assertEqual(before["MovementRecord"], 5)
         self.assertEqual(before["ActiveTrip"], 0)
-        self.assertEqual(before["AppSetting"], 1)
+        self.assertGreaterEqual(before["Driver"], 3)
+        self.assertEqual(before["VehicleReminder"], 0)
+        self.assertEqual(before["AppSetting"], 2)
 
 
 if __name__ == "__main__":

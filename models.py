@@ -2,7 +2,7 @@ from datetime import datetime
 import sqlite3
 
 from flask_sqlalchemy import SQLAlchemy
-from sqlalchemy import UniqueConstraint, event
+from sqlalchemy import Index, UniqueConstraint, event
 from sqlalchemy.engine import Engine
 
 
@@ -17,6 +17,44 @@ def configure_sqlite_connection(dbapi_connection, _connection_record):
     cursor.execute("PRAGMA foreign_keys=ON")
     cursor.execute("PRAGMA busy_timeout=5000")
     cursor.close()
+
+
+class Driver(db.Model):
+    __tablename__ = "drivers"
+
+    id = db.Column(db.Integer, primary_key=True)
+    employee_no = db.Column(
+        db.String(50),
+        nullable=True,
+        unique=True,
+        index=True,
+    )
+    full_name = db.Column(db.String(120), nullable=False, index=True)
+    department = db.Column(db.String(120), nullable=True)
+    phone = db.Column(db.String(40), nullable=True)
+    license_class = db.Column(db.String(40), nullable=True)
+    license_expiry_date = db.Column(db.Date, nullable=True, index=True)
+    active = db.Column(db.Boolean, nullable=False, default=True, index=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.now)
+    updated_at = db.Column(
+        db.DateTime,
+        nullable=False,
+        default=datetime.now,
+        onupdate=datetime.now,
+    )
+
+    active_trips = db.relationship(
+        "ActiveTrip",
+        back_populates="driver_profile",
+        foreign_keys="ActiveTrip.driver_id",
+        passive_deletes=True,
+    )
+    movement_records = db.relationship(
+        "MovementRecord",
+        back_populates="driver_profile",
+        foreign_keys="MovementRecord.driver_id",
+        passive_deletes=True,
+    )
 
 
 class Brand(db.Model):
@@ -71,6 +109,7 @@ class Vehicle(db.Model):
         index=True,
     )
     year = db.Column(db.Integer, nullable=True)
+    current_mileage = db.Column(db.Integer, nullable=True)
     active = db.Column(db.Boolean, nullable=False, default=True, index=True)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.now)
     updated_at = db.Column(
@@ -81,6 +120,22 @@ class Vehicle(db.Model):
     )
 
     model = db.relationship("VehicleModel", back_populates="vehicles")
+    active_trips = db.relationship(
+        "ActiveTrip",
+        back_populates="vehicle",
+        passive_deletes=True,
+    )
+    movement_records = db.relationship(
+        "MovementRecord",
+        back_populates="vehicle",
+        passive_deletes=True,
+    )
+    reminders = db.relationship(
+        "VehicleReminder",
+        back_populates="vehicle",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
 
 
 class MovementType(db.Model):
@@ -89,6 +144,16 @@ class MovementType(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(120), nullable=False, unique=True, index=True)
     description = db.Column(db.Text, nullable=False, default="")
+    requires_request_no = db.Column(
+        db.Boolean,
+        nullable=False,
+        default=False,
+    )
+    requires_service_form_no = db.Column(
+        db.Boolean,
+        nullable=False,
+        default=False,
+    )
     active = db.Column(db.Boolean, nullable=False, default=True, index=True)
     sort_order = db.Column(db.Integer, nullable=False, default=0)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.now)
@@ -110,6 +175,12 @@ class ActiveTrip(db.Model):
         nullable=True,
         index=True,
     )
+    driver_id = db.Column(
+        db.Integer,
+        db.ForeignKey("drivers.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     plate = db.Column(db.String(16), nullable=False, unique=True, index=True)
     vehicle_name = db.Column(
         db.String(255),
@@ -127,14 +198,32 @@ class ActiveTrip(db.Model):
     request_no = db.Column(db.String(100), nullable=False, default="")
     service_form_no = db.Column(db.String(100), nullable=False, default="")
     notes = db.Column(db.Text, nullable=False, default="")
+    created_by = db.Column(db.String(120), nullable=False, default="")
 
-    vehicle = db.relationship("Vehicle")
+    vehicle = db.relationship("Vehicle", back_populates="active_trips")
+    driver_profile = db.relationship(
+        "Driver",
+        back_populates="active_trips",
+        foreign_keys=[driver_id],
+    )
 
 
 class MovementRecord(db.Model):
     __tablename__ = "movement_records"
 
     id = db.Column(db.Integer, primary_key=True)
+    vehicle_id = db.Column(
+        db.Integer,
+        db.ForeignKey("vehicles.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    driver_id = db.Column(
+        db.Integer,
+        db.ForeignKey("drivers.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     action_type = db.Column(db.String(120), nullable=False)
     add_date = db.Column(
         db.DateTime(timezone=True),
@@ -152,6 +241,63 @@ class MovementRecord(db.Model):
     distance = db.Column(db.String(32), nullable=False, default="0")
     end_date = db.Column(db.DateTime(timezone=True), nullable=False)
     notes = db.Column(db.Text, nullable=False, default="")
+    created_by = db.Column(db.String(120), nullable=False, default="")
+
+    vehicle = db.relationship("Vehicle", back_populates="movement_records")
+    driver_profile = db.relationship(
+        "Driver",
+        back_populates="movement_records",
+        foreign_keys=[driver_id],
+    )
+
+
+class VehicleReminder(db.Model):
+    __tablename__ = "vehicle_reminders"
+    __table_args__ = (
+        Index(
+            "ix_vehicle_reminders_vehicle_active",
+            "vehicle_id",
+            "active",
+        ),
+        Index(
+            "ix_vehicle_reminders_due_date_active",
+            "due_date",
+            "active",
+        ),
+        Index(
+            "ix_vehicle_reminders_due_mileage_active",
+            "due_mileage",
+            "active",
+        ),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    vehicle_id = db.Column(
+        db.Integer,
+        db.ForeignKey("vehicles.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    reminder_type = db.Column(
+        db.String(80),
+        nullable=False,
+        index=True,
+    )
+    title = db.Column(db.String(160), nullable=False)
+    due_date = db.Column(db.Date, nullable=True)
+    due_mileage = db.Column(db.Integer, nullable=True)
+    notes = db.Column(db.Text, nullable=False, default="")
+    active = db.Column(db.Boolean, nullable=False, default=True, index=True)
+    completed_at = db.Column(db.DateTime(timezone=True), nullable=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.now)
+    updated_at = db.Column(
+        db.DateTime,
+        nullable=False,
+        default=datetime.now,
+        onupdate=datetime.now,
+    )
+
+    vehicle = db.relationship("Vehicle", back_populates="reminders")
 
 
 class AppSetting(db.Model):

@@ -4,8 +4,10 @@ FROM python:3.11-slim
 # Çalışma dizinini ayarla
 WORKDIR /app
 
-# Sistem gereksinimlerini yükle (Gerekirse)
-# RUN apt-get update && apt-get install -y --no-install-recommends gcc && rm -rf /var/lib/apt/lists/*
+# PDF raporlarında Türkçe karakter desteği için Unicode yazı tipi.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends fonts-dejavu-core \
+    && rm -rf /var/lib/apt/lists/*
 
 # Bağımlılık dosyasını kopyala ve kur
 COPY requirements.txt .
