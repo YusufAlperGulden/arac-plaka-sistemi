@@ -2139,7 +2139,7 @@ document.addEventListener('DOMContentLoaded', () => {
     backToActionsBtn.addEventListener('click', () => {
         if (state.currentStep === 2) {
             state.currentStep = 1;
-            updateUIForStep();
+            renderStep();
         } else {
             showActionSelection();
         }
