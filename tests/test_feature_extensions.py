@@ -342,7 +342,7 @@ class FeatureExtensionApiTests(unittest.TestCase):
         )
         self.assertEqual(below_start.status_code, 400)
         self.assertEqual(
-            len(self.client.get("/api/active-trips").get_json()["items"]),
+            self.client.get("/api/active-trips").get_json()["counts"]["active"],
             1,
         )
 
@@ -353,7 +353,7 @@ class FeatureExtensionApiTests(unittest.TestCase):
         )
         self.assertEqual(dropoff.status_code, 201)
         self.assertEqual(
-            len(self.client.get("/api/active-trips").get_json()["items"]),
+            self.client.get("/api/active-trips").get_json()["counts"]["active"],
             0,
         )
 

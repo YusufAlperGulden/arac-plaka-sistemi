@@ -566,6 +566,32 @@ def serialize_active_trip(active_trip):
     }
 
 
+def serialize_available_vehicle(vehicle):
+    display_plate = format_plate_for_display(vehicle.plate)
+    model_name = vehicle.model.name if vehicle.model else ""
+    brand_name = vehicle.model.brand.name if vehicle.model and vehicle.model.brand else ""
+    vehicle_name = f"{brand_name} {model_name}".strip()
+    return {
+        "id": f"available_{vehicle.id}",
+        "vehicle_id": vehicle.id,
+        "driver_id": None,
+        "plate": vehicle.plate,
+        "display_plate": display_plate,
+        "vehicle_name": vehicle_name,
+        "display_label": f"{vehicle_name} - {display_plate}",
+        "driver": "-",
+        "action_type": "Müsait",
+        "start_mileage": vehicle.current_mileage or 0,
+        "start_date": "-",
+        "start_at": None,
+        "request_no": "",
+        "service_form_no": "",
+        "notes": "",
+        "created_by": "",
+        "is_available": True
+    }
+
+
 def serialize_movement_record(record):
     return {
         "id": record.id,
@@ -1323,20 +1349,36 @@ def get_active_trips():
     active_trips = db.session.scalars(
         db.select(ActiveTrip).order_by(ActiveTrip.start_date.desc())
     ).all()
+    
+    active_vehicle_ids = [trip.vehicle_id for trip in active_trips if trip.vehicle_id is not None]
+    
+    query = db.select(Vehicle).where(Vehicle.active.is_(True))
+    if active_vehicle_ids:
+        query = query.where(Vehicle.id.notin_(active_vehicle_ids))
+        
+    available_vehicles = db.session.scalars(query).all()
+    
     active_vehicle_count = db.session.scalar(
         db.select(func.count(Vehicle.id)).where(Vehicle.active.is_(True))
     ) or 0
+    
     registered_active_count = sum(
         1
         for active_trip in active_trips
         if active_trip.vehicle_id is not None
     )
+    
+    items = [
+        serialize_active_trip(active_trip)
+        for active_trip in active_trips
+    ] + [
+        serialize_available_vehicle(vehicle)
+        for vehicle in available_vehicles
+    ]
+    
     return jsonify({
         "success": True,
-        "items": [
-            serialize_active_trip(active_trip)
-            for active_trip in active_trips
-        ],
+        "items": items,
         "counts": {
             "total": active_vehicle_count,
             "active": len(active_trips),

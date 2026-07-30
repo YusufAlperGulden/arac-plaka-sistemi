@@ -885,38 +885,65 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const details = document.createElement('div');
             details.className = 'management-item-details';
-            const detailValues = [
-                ['Başlangıç', item.start_date],
-                ['Başlangıç KM', item.start_mileage],
-                ['Geçen Süre', formatElapsedTime(item.start_at)],
-            ];
-            if (item.request_no) {
-                detailValues.push(['Talep No', item.request_no]);
-            }
-            if (item.service_form_no) {
-                detailValues.push(['Servis Formu', item.service_form_no]);
-            }
-            detailValues.forEach(([label, value]) => {
-                const detail = document.createElement('span');
-                const strong = document.createElement('strong');
-                strong.textContent = `${label}: `;
-                detail.append(strong, document.createTextNode(value || '-'));
-                details.appendChild(detail);
-            });
-
             const actions = document.createElement('div');
             actions.className = 'item-actions';
-            actions.appendChild(createActionButton(
-                'Teslim Et',
-                'btn-primary',
-                () => startProcess(
-                    'Teslim Etme',
-                    'dropoff',
-                    item.plate,
-                    item.action_type,
-                    item.driver_id
-                )
-            ));
+            
+            if (item.is_available) {
+                const detailValues = [
+                    ['Güncel KM', item.start_mileage],
+                ];
+                detailValues.forEach(([label, value]) => {
+                    const detail = document.createElement('span');
+                    const strong = document.createElement('strong');
+                    strong.textContent = `${label}: `;
+                    detail.append(strong, document.createTextNode(value || '-'));
+                    details.appendChild(detail);
+                });
+
+                actions.appendChild(createActionButton(
+                    'Kullanıma Al',
+                    'btn-secondary',
+                    () => startProcess(
+                        'Araç Alma',
+                        'pickup',
+                        item.plate,
+                        '',
+                        ''
+                    )
+                ));
+            } else {
+                const detailValues = [
+                    ['Başlangıç', item.start_date],
+                    ['Başlangıç KM', item.start_mileage],
+                    ['Geçen Süre', formatElapsedTime(item.start_at)],
+                ];
+                if (item.request_no) {
+                    detailValues.push(['Talep No', item.request_no]);
+                }
+                if (item.service_form_no) {
+                    detailValues.push(['Servis Formu', item.service_form_no]);
+                }
+                detailValues.forEach(([label, value]) => {
+                    const detail = document.createElement('span');
+                    const strong = document.createElement('strong');
+                    strong.textContent = `${label}: `;
+                    detail.append(strong, document.createTextNode(value || '-'));
+                    details.appendChild(detail);
+                });
+
+                actions.appendChild(createActionButton(
+                    'Teslim Et',
+                    'btn-primary',
+                    () => startProcess(
+                        'Teslim Etme',
+                        'dropoff',
+                        item.plate,
+                        item.action_type,
+                        item.driver_id
+                    )
+                ));
+            }
+            
             card.append(header, details, actions);
             activeTripList.appendChild(card);
         });

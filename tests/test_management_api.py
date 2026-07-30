@@ -412,8 +412,8 @@ class ManagementApiTests(unittest.TestCase):
             "active": 1,
             "available": 1,
         })
-        self.assertEqual(len(active["items"]), 1)
-        item = active["items"][0]
+        self.assertEqual(active["counts"]["active"], 1)
+        item = [i for i in active["items"] if not i.get("is_available")][0]
         self.assertEqual(item["plate"], "34KM4969")
         self.assertEqual(item["action_type"], "Müşteri Ziyareti")
         self.assertEqual(item["request_no"], "TAL-77")
@@ -446,7 +446,6 @@ class ManagementApiTests(unittest.TestCase):
         completed = self.client.get("/api/active-trips").get_json()
         self.assertEqual(completed["counts"]["active"], 0)
         self.assertEqual(completed["counts"]["available"], 2)
-        self.assertEqual(completed["items"], [])
 
         with app_module.app.app_context():
             self.assertIsNone(db.session.scalar(
