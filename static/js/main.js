@@ -4328,12 +4328,28 @@ document.addEventListener('DOMContentLoaded', () => {
         fetchAndShowReport('/api/reports/recent');
     });
 
-    reportAdvancedBtn.addEventListener('click', () => {
-        currentReportMode = 'advanced';
-        resetAdvancedReportFilters();
-        reportTitle.textContent = '🔎 Gelişmiş Hareket Raporu';
-        fetchAdvancedReport();
-    });
+    if (typeof reportAdvancedBtn !== 'undefined' && reportAdvancedBtn) {
+
+
+        reportAdvancedBtn.addEventListener('click', () => {
+
+
+                currentReportMode = 'advanced';
+
+
+                resetAdvancedReportFilters();
+
+
+                reportTitle.textContent = '🔎 Gelişmiş Hareket Raporu';
+
+
+                fetchAdvancedReport();
+
+
+            });
+
+
+    }
 
     reportVehicleBtn.addEventListener('click', () => {
         hideAllSections();
