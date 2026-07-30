@@ -965,9 +965,6 @@ button {
 
 .report-filter-actions {
     padding-top: 2px;
-    grid-column: 2 / -1;
-    align-self: end;
-    padding-bottom: 14px;
 }
 
 .export-actions {
