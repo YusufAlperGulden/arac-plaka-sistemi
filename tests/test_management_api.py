@@ -139,6 +139,12 @@ class ManagementApiTests(unittest.TestCase):
             "Yeni sürücüyü kaydedip bu işleme otomatik dönün.",
             html,
         )
+        self.assertIn('id="add-new-movement-type-btn"', html)
+        self.assertIn('id="movement-type-registration-return-note"', html)
+        self.assertIn(
+            "Yeni kullanım amacını kaydedip bu işleme otomatik dönün.",
+            html,
+        )
 
     def test_management_permissions_distinguish_anonymous_regular_and_admin(self):
         for path in (

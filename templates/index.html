@@ -383,6 +383,12 @@
                 </div>
             </div>
 
+            <div id="movement-type-registration-return-note"
+                 class="shortcut-context-note hidden"
+                 role="status">
+                <strong>Yeni hareket türü kaydı</strong>
+                <span>Hareket türünü kaydedince önceki işleme dönülecek ve yeni tür otomatik seçilecek.</span>
+            </div>
             <form id="movement-type-form" class="management-form glass-panel">
                 <input id="movement-type-id" type="hidden">
                 <div class="input-group">
@@ -712,10 +718,17 @@
 
                         <label for="action-type-select" style="margin-top: 15px;">Kullanım Amacı</label>
                         <select id="action-type-select" name="action-type-select">
-                            {% for purpose in usage_purposes %}
-                            <option value="{{ purpose }}" {% if purpose == "Diğer" %}selected{% endif %}>{{ purpose }}</option>
-                            {% endfor %}
+                            <!-- Options will be populated by JS -->
                         </select>
+                        <button id="add-new-movement-type-btn"
+                                class="btn-outline admin-only selection-shortcut-btn"
+                                type="button"
+                                aria-describedby="add-new-movement-type-help">
+                            ➕ Yeni Kullanım Amacı Ekle
+                        </button>
+                        <p id="add-new-movement-type-help" class="selection-shortcut-help admin-only">
+                            Yeni kullanım amacını kaydedip bu işleme otomatik dönün.
+                        </p>
 
                         <label for="driver-select" style="margin-top: 15px;">Sürücü</label>
                         <select id="driver-select" name="driver-select" required>

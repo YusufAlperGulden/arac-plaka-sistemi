@@ -261,6 +261,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const actionTypeSelect = document.getElementById('action-type-select');
     const driverSelect = document.getElementById('driver-select');
     const addNewDriverBtn = document.getElementById('add-new-driver-btn');
+    const addNewMovementTypeBtn = document.getElementById('add-new-movement-type-btn');
     const mileageInput = document.getElementById('mileage-input');
     const requestNoGroup = document.getElementById('request-no-group');
     const requestNoInput = document.getElementById('request-no-input');
@@ -298,6 +299,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let movementTypesCache = [];
     let fleetReturnContext = null;
     let driverReturnContext = null;
+    let movementTypeReturnContext = null;
 
     function formatPlateForDisplay(value) {
         const parsed = parseTurkishPlate(
@@ -1620,6 +1622,58 @@ document.addEventListener('DOMContentLoaded', () => {
         );
     }
 
+    function captureMovementTypeReturnContext() {
+        return {
+            title: dashboardTitle.textContent,
+            currentAction: state.currentAction,
+            plate: plateSelect.value || '',
+            actionType: actionTypeSelect.value || '',
+            driverId: driverSelect.value || null,
+        };
+    }
+
+    function returnToProcessFromMovementType(preselectedActionType = null) {
+        const savedContext = movementTypeReturnContext;
+        if (!savedContext) {
+            reportMenuBtn.click();
+            return;
+        }
+
+        movementTypeReturnContext = null;
+        movementTypeActiveInput.disabled = false;
+        backFromMovementTypeManagementBtn.textContent = '⬅ Geri';
+        const returnNote = document.getElementById('movement-type-registration-return-note');
+        if (returnNote) {
+            returnNote.classList.add('hidden');
+        }
+        startProcess(
+            savedContext.title,
+            savedContext.currentAction,
+            savedContext.plate,
+            preselectedActionType || savedContext.actionType,
+            savedContext.driverId
+        ).then(() => actionTypeSelect.focus());
+    }
+
+    function openNewMovementTypeShortcut() {
+        if (!state.isAdmin) {
+            window.showToast(
+                'Yeni kullanım amacı kaydı için yönetici yetkisi gerekiyor.',
+                'error'
+            );
+            return;
+        }
+
+        fleetReturnContext = null;
+        driverReturnContext = null;
+        movementTypeReturnContext = captureMovementTypeReturnContext();
+        showMovementTypeManagement({ preserveReturnContext: true });
+        window.showToast(
+            'Yeni kullanım amacını kaydedin; ardından bu işleme otomatik döneceksiniz.',
+            'success'
+        );
+    }
+
     function resetMovementTypeForm() {
         movementTypeIdInput.value = '';
         movementTypeNameInput.value = '';
@@ -1749,16 +1803,34 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    function showMovementTypeManagement() {
+    function showMovementTypeManagement({
+        preserveReturnContext = false,
+    } = {}) {
         if (!state.isAdmin) {
             window.showToast('Bu işlem için yönetici yetkisi gerekiyor.', 'error');
             return;
+        }
+        if (!preserveReturnContext) {
+            movementTypeReturnContext = null;
         }
         hideAllSections();
         movementTypeManagementSection.classList.remove('hidden');
         movementTypeManagementSection.classList.add('active');
         resetMovementTypeForm();
-        loadMovementTypeManagement();
+        movementTypeActiveInput.checked = true;
+        movementTypeActiveInput.disabled = Boolean(movementTypeReturnContext);
+        backFromMovementTypeManagementBtn.textContent = movementTypeReturnContext
+            ? '← İşleme Dön'
+            : '⬅ Geri';
+        const returnNote = document.getElementById('movement-type-registration-return-note');
+        if (returnNote) {
+            returnNote.classList.toggle('hidden', !movementTypeReturnContext);
+        }
+        const typesPromise = loadMovementTypeManagement();
+        if (movementTypeReturnContext) {
+            typesPromise.finally(() => movementTypeNameInput.focus());
+        }
+        return typesPromise;
     }
 
     // ---- DASHBOARD / İŞLEM (KAMERA) AKIŞI ----
@@ -1791,8 +1863,11 @@ document.addEventListener('DOMContentLoaded', () => {
     addNewPlateBtn.addEventListener('click', openNewPlateShortcut);
     movementTypeManagementBtn.addEventListener(
         'click',
-        showMovementTypeManagement
+        () => showMovementTypeManagement()
     );
+    if (addNewMovementTypeBtn) {
+        addNewMovementTypeBtn.addEventListener('click', openNewMovementTypeShortcut);
+    }
     driverManagementBtn.addEventListener(
         'click',
         () => showDriverManagement()
@@ -1804,7 +1879,7 @@ document.addEventListener('DOMContentLoaded', () => {
     );
     backFromMovementTypeManagementBtn.addEventListener(
         'click',
-        () => reportMenuBtn.click()
+        () => returnToProcessFromMovementType()
     );
     backFromDriverManagementBtn.addEventListener(
         'click',
@@ -2020,6 +2095,16 @@ document.addEventListener('DOMContentLoaded', () => {
             window.showToast(result.message, 'success');
             resetMovementTypeForm();
             await loadMovementTypeManagement();
+            
+            if (!id && movementTypeReturnContext && result?.movement_type?.active) {
+                returnToProcessFromMovementType(result.movement_type.name);
+            } else if (!id && movementTypeReturnContext && result?.movement_type && !result.movement_type.active) {
+                movementTypeReturnContext.actionType = result.movement_type.name;
+                window.showToast(
+                    'Pasif kullanım amacı işlem listesine eklenmez. Amacı aktifleştirip işleme dönün.',
+                    'error'
+                );
+            }
         } catch (error) {
             window.showToast(error.message, 'error');
         } finally {
@@ -4798,10 +4883,8 @@ document.addEventListener('DOMContentLoaded', () => {
             return true;
         }
 
-        if (
-            movementTypeManagementSection.classList.contains('active')
-        ) {
-            reportMenuBtn.click();
+        if (movementTypeManagementSection.classList.contains('active')) {
+            backFromMovementTypeManagementBtn.click();
             return true;
         }
 
@@ -4831,6 +4914,7 @@ document.addEventListener('DOMContentLoaded', () => {
         hideAllSections();
         fleetReturnContext = null;
         driverReturnContext = null;
+        movementTypeReturnContext = null;
         state = {
             username: null,
             isAdmin: false,
