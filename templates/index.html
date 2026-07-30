@@ -571,22 +571,25 @@
                             <option value="completed">Tamamlanan</option>
                         </select>
                     </div>
-                    <div class="input-group compact-input report-search-field">
+                </div>
+                
+                <div style="display: flex; gap: 14px; align-items: flex-end; margin-top: 14px; flex-wrap: wrap;">
+                    <div class="input-group compact-input report-search-field" style="width: 250px; flex-shrink: 0; margin-bottom: 0;">
                         <label for="global-search">Metin Arama</label>
                         <div style="position: relative; width: 100%;">
                             <span style="position: absolute; left: 10px; top: 50%; transform: translateY(-50%); font-size: 1.1rem; color: #a1a1aa; pointer-events: none;">🔍</span>
-                            <input type="search" id="global-search" placeholder="Plaka, araç, sürücü, talep, servis veya not ara..." style="padding-left: 35px; width: 100%; box-sizing: border-box;">
+                            <input type="search" id="global-search" placeholder="Plaka, araç, sürücü..." style="padding-left: 35px; width: 100%; box-sizing: border-box;">
                         </div>
                     </div>
-                    <div class="input-group compact-input">
+                    <div class="input-group compact-input" style="margin-bottom: 0; width: auto;">
                         <label>&nbsp;</label>
-                        <button id="apply-advanced-filters-btn" class="btn-primary" type="button" style="width: 100%; margin: 0; min-height: 36px;">Filtreleri Uygula</button>
+                        <button id="apply-advanced-filters-btn" class="btn-primary" type="button" style="margin: 0; min-height: 36px; padding: 0 16px; white-space: nowrap;">Filtreleri Uygula</button>
                     </div>
-                    <div class="input-group compact-input">
+                    <div class="input-group compact-input" style="margin-bottom: 0; width: auto;">
                         <label>&nbsp;</label>
-                        <button id="clear-advanced-filters-btn" class="btn-secondary" type="button" style="width: 100%; margin: 0; min-height: 36px;">Filtreleri Temizle</button>
+                        <button id="clear-advanced-filters-btn" class="btn-secondary" type="button" style="margin: 0; min-height: 36px; padding: 0 16px; white-space: nowrap;">Filtreleri Temizle</button>
                     </div>
-                    <div class="input-group compact-input">
+                    <div class="input-group compact-input" style="margin-left: auto; width: 250px; margin-bottom: 0;">
                         <label for="sort-by">Sırala</label>
                         <select id="sort-by">
                             <option value="date-desc">Ekleme Tarihi (En Yeni)</option>
@@ -833,7 +836,7 @@
     <!-- Tesseract.js for OCR -->
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
     <script src="/static/js/ocr-utils.js?v=24"></script>
-    <script src="/static/js/main.js?v=32"></script>
+    <script src="/static/js/main.js?v=33"></script>
 
     <script>
         // Sayfa değiştiğinde ana başlığı (Fatura İşleme Sistemi benzeri) gizle/göster
