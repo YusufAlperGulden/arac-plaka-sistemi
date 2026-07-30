@@ -4359,8 +4359,6 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     backToReportsMenuBtn.addEventListener('click', () => {
-        console.log('backToReportsMenuBtn clicked!');
-        window.showToast('Geri butonuna tıklandı!', 'info');
         hideAllSections();
         reportsMenuSection.classList.remove('hidden');
         reportsMenuSection.classList.add('active');
