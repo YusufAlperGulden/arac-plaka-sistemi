@@ -780,13 +780,13 @@ button {
     margin-bottom: 8px;
 }
 
-.plate-shortcut-btn {
+.selection-shortcut-btn {
     width: 100%;
     min-height: 44px;
     margin-top: 10px;
 }
 
-.plate-shortcut-help {
+.selection-shortcut-help {
     margin: 7px 0 0;
     color: var(--text-secondary);
     font-size: 0.82rem;

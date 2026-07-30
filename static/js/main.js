@@ -208,6 +208,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const driverActiveInput = document.getElementById('driver-active');
     const driverCancelBtn = document.getElementById('driver-cancel-btn');
     const driverList = document.getElementById('driver-list');
+    const driverRegistrationReturnNote = document.getElementById(
+        'driver-registration-return-note'
+    );
 
     // ---- ARAÇ BAZLI RAPOR SEÇİM EKRANI ----
     const reportPlateSelect = document.getElementById('report-plate-select');
@@ -257,6 +260,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const selectedVehicleInfo = document.getElementById('selected-vehicle-info');
     const actionTypeSelect = document.getElementById('action-type-select');
     const driverSelect = document.getElementById('driver-select');
+    const addNewDriverBtn = document.getElementById('add-new-driver-btn');
     const mileageInput = document.getElementById('mileage-input');
     const requestNoGroup = document.getElementById('request-no-group');
     const requestNoInput = document.getElementById('request-no-input');
@@ -293,6 +297,7 @@ document.addEventListener('DOMContentLoaded', () => {
     };
     let movementTypesCache = [];
     let fleetReturnContext = null;
+    let driverReturnContext = null;
 
     function formatPlateForDisplay(value) {
         const parsed = parseTurkishPlate(
@@ -719,7 +724,9 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    function showDriverManagement() {
+    function showDriverManagement({
+        preserveReturnContext = false,
+    } = {}) {
         if (!state.isAdmin) {
             window.showToast(
                 'Bu işlem için yönetici yetkisi gerekiyor.',
@@ -727,11 +734,27 @@ document.addEventListener('DOMContentLoaded', () => {
             );
             return;
         }
+        if (!preserveReturnContext) {
+            driverReturnContext = null;
+        }
         hideAllSections();
         driverManagementSection.classList.remove('hidden');
         driverManagementSection.classList.add('active');
         resetDriverForm();
-        loadDriverManagement();
+        driverActiveInput.checked = true;
+        driverActiveInput.disabled = Boolean(driverReturnContext);
+        backFromDriverManagementBtn.textContent = driverReturnContext
+            ? '← İşleme Dön'
+            : '⬅ Geri';
+        driverRegistrationReturnNote.classList.toggle(
+            'hidden',
+            !driverReturnContext
+        );
+        const driversPromise = loadDriverManagement();
+        if (driverReturnContext) {
+            driversPromise.finally(() => driverFullNameInput.focus());
+        }
+        return driversPromise;
     }
 
     async function loadMovementTypes() {
@@ -1532,6 +1555,7 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
+        driverReturnContext = null;
         fleetReturnContext = captureFleetReturnContext();
         const selectedOption = plateSelect.selectedOptions[0];
         const temporaryPlate = selectedOption?.dataset.ocrTemporary === 'true'
@@ -1544,6 +1568,54 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         window.showToast(
             'Yeni aracı kaydedin; ardından bu işleme otomatik döneceksiniz.',
+            'success'
+        );
+    }
+
+    function captureDriverReturnContext() {
+        return {
+            title: dashboardTitle.textContent,
+            currentAction: state.currentAction,
+            plate: plateSelect.value || '',
+            actionType: actionTypeSelect.value || '',
+            driverId: driverSelect.value || null,
+        };
+    }
+
+    function returnToProcessFromDriver(preselectedDriverId = null) {
+        const savedContext = driverReturnContext;
+        if (!savedContext) {
+            reportMenuBtn.click();
+            return;
+        }
+
+        driverReturnContext = null;
+        driverActiveInput.disabled = false;
+        backFromDriverManagementBtn.textContent = '⬅ Geri';
+        driverRegistrationReturnNote.classList.add('hidden');
+        startProcess(
+            savedContext.title,
+            savedContext.currentAction,
+            savedContext.plate,
+            savedContext.actionType,
+            preselectedDriverId || savedContext.driverId
+        ).then(() => driverSelect.focus());
+    }
+
+    function openNewDriverShortcut() {
+        if (!state.isAdmin) {
+            window.showToast(
+                'Yeni sürücü kaydı için yönetici yetkisi gerekiyor.',
+                'error'
+            );
+            return;
+        }
+
+        fleetReturnContext = null;
+        driverReturnContext = captureDriverReturnContext();
+        showDriverManagement({ preserveReturnContext: true });
+        window.showToast(
+            'Yeni sürücüyü kaydedin; ardından bu işleme otomatik döneceksiniz.',
             'success'
         );
     }
@@ -1721,7 +1793,11 @@ document.addEventListener('DOMContentLoaded', () => {
         'click',
         showMovementTypeManagement
     );
-    driverManagementBtn.addEventListener('click', showDriverManagement);
+    driverManagementBtn.addEventListener(
+        'click',
+        () => showDriverManagement()
+    );
+    addNewDriverBtn.addEventListener('click', openNewDriverShortcut);
     backFromFleetManagementBtn.addEventListener(
         'click',
         () => returnToProcessFromFleet()
@@ -1732,7 +1808,7 @@ document.addEventListener('DOMContentLoaded', () => {
     );
     backFromDriverManagementBtn.addEventListener(
         'click',
-        () => reportMenuBtn.click()
+        () => returnToProcessFromDriver()
     );
     fleetTabs.forEach(tab => {
         tab.addEventListener(
@@ -1852,6 +1928,24 @@ document.addEventListener('DOMContentLoaded', () => {
             window.showToast(result.message, 'success');
             resetDriverForm();
             await loadDriverManagement();
+            if (
+                !id
+                && driverReturnContext
+                && result?.driver?.active
+            ) {
+                returnToProcessFromDriver(result.driver.id);
+            } else if (
+                !id
+                && driverReturnContext
+                && result?.driver
+                && !result.driver.active
+            ) {
+                driverReturnContext.driverId = String(result.driver.id);
+                window.showToast(
+                    'Pasif sürücü işlem listesine eklenmez. Sürücüyü aktifleştirip işleme dönün.',
+                    'error'
+                );
+            }
         } catch (error) {
             window.showToast(error.message, 'error');
         } finally {
@@ -4699,9 +4793,13 @@ document.addEventListener('DOMContentLoaded', () => {
             return true;
         }
 
+        if (driverManagementSection.classList.contains('active')) {
+            backFromDriverManagementBtn.click();
+            return true;
+        }
+
         if (
             movementTypeManagementSection.classList.contains('active')
-            || driverManagementSection.classList.contains('active')
         ) {
             reportMenuBtn.click();
             return true;
@@ -4732,6 +4830,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function logout() {
         hideAllSections();
         fleetReturnContext = null;
+        driverReturnContext = null;
         state = {
             username: null,
             isAdmin: false,

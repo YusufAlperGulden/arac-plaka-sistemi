@@ -125,12 +125,18 @@ class ManagementApiTests(unittest.TestCase):
         html = response.get_data(as_text=True)
         self.assertIn('id="add-new-plate-btn"', html)
         self.assertIn(
-            'class="btn-outline admin-only plate-shortcut-btn"',
+            'class="btn-outline admin-only selection-shortcut-btn"',
             html,
         )
         self.assertIn('id="vehicle-registration-return-note"', html)
         self.assertIn(
             "Yeni aracı kaydedip bu işleme otomatik dönün.",
+            html,
+        )
+        self.assertIn('id="add-new-driver-btn"', html)
+        self.assertIn('id="driver-registration-return-note"', html)
+        self.assertIn(
+            "Yeni sürücüyü kaydedip bu işleme otomatik dönün.",
             html,
         )
 
