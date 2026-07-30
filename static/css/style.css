@@ -322,6 +322,12 @@ button {
     color: white;
 }
 
+.btn-sm {
+    min-height: 36px !important;
+    padding: 0 12px !important;
+    font-size: 0.9rem !important;
+}
+
 .btn-outline {
     background: transparent;
     color: var(--accent-color);
@@ -959,6 +965,9 @@ button {
 
 .report-filter-actions {
     padding-top: 2px;
+    grid-column: 2 / -1;
+    align-self: end;
+    padding-bottom: 14px;
 }
 
 .export-actions {
@@ -1096,6 +1105,7 @@ button {
         align-items: stretch;
         flex-direction: column;
         width: 100%;
+        grid-column: 1 / -1;
     }
     .export-actions {
         margin-left: 0;
