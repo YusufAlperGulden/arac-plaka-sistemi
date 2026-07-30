@@ -2465,9 +2465,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
     function calculateOcrSize(width, height) {
-        const maxWidth = 800;
-        const minWidth = 400;
-        let targetWidth = Math.min(maxWidth, Math.max(minWidth, width * 1.5));
+        const maxWidth = 1600;
+        const minWidth = 800;
+        let targetWidth = Math.min(maxWidth, Math.max(minWidth, width * 2));
         const scale = targetWidth / width;
         return {
             width: Math.round(targetWidth),
@@ -3014,7 +3014,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const serverCandidateEntries = cropCaptures
             .map((capture, captureIndex) => ({ capture, captureIndex }))
             .filter(entry => !entry.capture.sourceCrop?.estimateOnly)
-            .slice(0, 1);
+            .slice(0, 4);
         const serverCandidates = serverCandidateEntries.map(entry => entry.capture);
         if (!serverCandidates.length) {
             return null;
@@ -3026,7 +3026,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     images: serverCandidates.map(
-                        capture => capture.canvas.toDataURL('image/jpeg', 0.6)
+                        capture => capture.canvas.toDataURL('image/jpeg', 1.0)
                     )
                 }),
                 signal: abortController.signal
