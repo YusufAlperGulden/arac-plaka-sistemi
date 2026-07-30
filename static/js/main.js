@@ -2374,8 +2374,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const ocrRetryBtn = document.getElementById('ocr-retry-btn');
     const ocrManualEditContainer = document.getElementById('ocr-manual-edit-container');
     const ocrManualInput = document.getElementById('ocr-manual-input');
-    const ocrDebugCanvas = document.getElementById('ocr-debug-canvas');
-    const ocrOriginalCanvas = document.getElementById('ocr-original-crop-canvas'); // Yeni eklendi
 
     let currentOcrPlate = null;
     let currentOcrSource = null;
@@ -3600,16 +3598,6 @@ document.addEventListener('DOMContentLoaded', () => {
         currentOcrPlate = bestMatch.text;
         currentOcrSource = source;
 
-        if (ocrDebugCanvas) {
-            ocrDebugCanvas.width = bestMatch.canvasW;
-            ocrDebugCanvas.height = bestMatch.canvasH;
-            ocrDebugCanvas.getContext('2d').putImageData(bestMatch.canvasContext, 0, 0);
-        }
-        if (ocrOriginalCanvas && bestMatch.originalCanvasContext) {
-            ocrOriginalCanvas.width = bestMatch.canvasW;
-            ocrOriginalCanvas.height = bestMatch.canvasH;
-            ocrOriginalCanvas.getContext('2d').putImageData(bestMatch.originalCanvasContext, 0, 0);
-        }
 
         ocrResultText.textContent = bestMatch.parts.join(' ');
 
@@ -3734,13 +3722,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 );
             }
 
-            if (ocrOriginalCanvas) {
-                ocrOriginalCanvas.width = primaryCapture.canvas.width;
-                ocrOriginalCanvas.height = primaryCapture.canvas.height;
-                ocrOriginalCanvas
-                    .getContext('2d')
-                    .putImageData(primaryCapture.originalImageData, 0, 0);
-            }
 
             const serverResult = await requestServerOcr(cropCaptures);
             if (sessionId !== ocrSessionId) return false;
@@ -4094,8 +4075,6 @@ document.addEventListener('DOMContentLoaded', () => {
         currentOcrPlate = null;
         currentOcrSource = null;
         if (ocrManualInput) ocrManualInput.value = "";
-        clearCanvas(ocrOriginalCanvas);
-        clearCanvas(ocrDebugCanvas);
     }
 
     // Bind cleanup to navigation and page close events

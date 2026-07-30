@@ -838,7 +838,14 @@ def register():
         is_admin=False
     )
     db.session.add(new_user)
-    db.session.commit()
+    try:
+        db.session.commit()
+    except IntegrityError:
+        db.session.rollback()
+        return jsonify({
+            "success": False,
+            "message": "Bu kullan\u0131c\u0131 ad\u0131 zaten al\u0131nm\u0131\u015f."
+        }), 400
     
     session.clear()
     session['user'] = new_user.username
@@ -2188,7 +2195,14 @@ def manage_maintenance_reminders():
     if parse_boolean(data.get("completed"), default=False):
         reminder.completed_at = now_utc()
     db.session.add(reminder)
-    db.session.commit()
+    try:
+        db.session.commit()
+    except IntegrityError:
+        db.session.rollback()
+        return jsonify({
+            "success": False,
+            "message": "Veritaban\u0131 kay\u0131t hatas\u0131 olu\u015ftu."
+        }), 500
     return jsonify({
         "success": True,
         "message": "Bakım hatırlatması kaydedildi.",
@@ -2274,7 +2288,14 @@ def update_maintenance_reminder(reminder_id):
             if parse_boolean(data.get("completed"), default=False)
             else None
         )
-    db.session.commit()
+    try:
+        db.session.commit()
+    except IntegrityError:
+        db.session.rollback()
+        return jsonify({
+            "success": False,
+            "message": "Veritaban\u0131 g\u00fcncelleme hatas\u0131 olu\u015ftu."
+        }), 500
     return jsonify({
         "success": True,
         "message": "Bakım hatırlatması güncellendi.",
@@ -3187,4 +3208,5 @@ with app.app_context():
 
 
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    debug_mode = os.environ.get("FLASK_DEBUG", "False").lower() in ("true", "1", "yes")
+    app.run(debug=debug_mode, host='0.0.0.0', port=5000)
