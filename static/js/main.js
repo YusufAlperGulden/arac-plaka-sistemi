@@ -608,7 +608,7 @@ document.addEventListener('DOMContentLoaded', () => {
             'hidden',
             !requiresServiceFormNo
         );
-        serviceFormNoInput.required = requiresServiceFormNo;
+        serviceFormNoInput.required = false; // Intentionally false per user request
         if (!requiresServiceFormNo) {
             serviceFormNoInput.value = '';
         }

@@ -359,8 +359,6 @@ def validate_required_movement_fields(
         return "Geçerli ve aktif bir hareket türü seçmelisiniz."
     if movement_type.requires_request_no and not request_no:
         return "Seçilen hareket türü için Talep No zorunludur."
-    if movement_type.requires_service_form_no and not service_form_no:
-        return "Seçilen hareket türü için Servis Formu Numarası zorunludur."
     return None
 
 

@@ -251,18 +251,7 @@ class FeatureExtensionApiTests(unittest.TestCase):
             mileage=5100,
             request_no="TAL-100",
         )
-        self.assertEqual(missing_service.status_code, 400)
-        self.assertIn("Servis Formu", missing_service.get_json()["message"])
-
-        valid = self.record(
-            plate=vehicle["plate"],
-            action="pickup",
-            action_type=movement_type["name"],
-            mileage=5100,
-            request_no="TAL-100",
-            service_form_no="SRV-200",
-        )
-        self.assertEqual(valid.status_code, 201)
+        self.assertEqual(missing_service.status_code, 201)
 
         changed = self.client.patch(
             f"/api/movement-types/{movement_type['id']}",
