@@ -106,10 +106,13 @@
     
     <!-- Yönetim / Rapor Menüsü Ekranı -->
     <section id="reports-menu-section" class="screen-section hidden">
-        <div class="glass-card selection-wrapper">
-            <div class="login-header">
-                <h2>Raporlar</h2>
-                <p style="color: var(--text-secondary);">Görüntülemek istediğiniz raporu seçin.</p>
+        <div class="glass-card management-wrapper">
+            <div class="management-header">
+                <button id="back-from-reports-menu-btn" class="btn-secondary">⬅ Geri</button>
+                <div>
+                    <h2>Raporlar</h2>
+                    <p>Görüntülemek istediğiniz raporu seçin.</p>
+                </div>
             </div>
             
             <div class="action-buttons-grid">
@@ -145,7 +148,6 @@
             </div>
 
             <p id="database-status-text" class="database-status-text admin-only" aria-live="polite"></p>
-            <button id="back-from-reports-menu-btn" class="btn-secondary" style="margin-top: 30px; width: 100%;">⬅ Geri Dön</button>
         </div>
     </section>
 
@@ -430,6 +432,12 @@
                 </div>
             </div>
 
+            <div id="driver-registration-return-note"
+                 class="shortcut-context-note hidden"
+                 role="status">
+                <strong>Yeni sürücü kaydı</strong>
+                <span>Sürücüyü kaydedince önceki işleme dönülecek ve yeni sürücü otomatik seçilecek.</span>
+            </div>
             <form id="driver-form" class="management-form glass-panel">
                 <input id="driver-id" type="hidden">
                 <div class="responsive-form-grid">
@@ -692,12 +700,12 @@
                             <!-- Seçenekler JS ile dinamik olarak backend'den doldurulacak -->
                         </select>
                         <button id="add-new-plate-btn"
-                                class="btn-outline admin-only plate-shortcut-btn"
+                                class="btn-outline admin-only selection-shortcut-btn"
                                 type="button"
                                 aria-describedby="add-new-plate-help">
                             ➕ Yeni Plaka Ekle
                         </button>
-                        <p id="add-new-plate-help" class="plate-shortcut-help admin-only">
+                        <p id="add-new-plate-help" class="selection-shortcut-help admin-only">
                             Yeni aracı kaydedip bu işleme otomatik dönün.
                         </p>
                         <p id="selected-vehicle-info" class="subtitle hidden" aria-live="polite" style="margin: 10px 0 0;"></p>
@@ -713,6 +721,15 @@
                         <select id="driver-select" name="driver-select" required>
                             <option value="" disabled selected>Sürücü Seçin...</option>
                         </select>
+                        <button id="add-new-driver-btn"
+                                class="btn-outline admin-only selection-shortcut-btn"
+                                type="button"
+                                aria-describedby="add-new-driver-help">
+                            ➕ Yeni Sürücü Ekle
+                        </button>
+                        <p id="add-new-driver-help" class="selection-shortcut-help admin-only">
+                            Yeni sürücüyü kaydedip bu işleme otomatik dönün.
+                        </p>
                     </div>
 
                     <!-- Adım 2: Kilometre Girişi (Başlangıçta Gizli) -->
