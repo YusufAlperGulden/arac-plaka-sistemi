@@ -4412,11 +4412,22 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     function populateReportDriverFilter(selectedValue = '') {
-        const items = driversCache
+        let items = driversCache
             .map(driver => ({
                 ...driver,
                 display_name: getDriverDisplayLabel(driver),
             }));
+
+        if (currentReportMode === 'vehicle' && currentRecords && currentRecords.length > 0) {
+            const usedDriverIds = new Set(
+                currentRecords
+                    .map(r => r.driver_id)
+                    .filter(id => id != null)
+                    .map(String)
+            );
+            items = items.filter(d => usedDriverIds.has(String(d.id)));
+        }
+
         replaceSelectOptions(reportDriverFilter, items, {
             placeholder: 'Tüm Sürücüler',
             placeholderDisabled: false,
@@ -4617,6 +4628,11 @@ document.addEventListener('DOMContentLoaded', () => {
             
             if (response.ok && result.success) {
                 currentRecords = result.records; // Veriyi kaydet
+                
+                if (currentReportMode === 'vehicle') {
+                    populateReportDriverFilter(reportDriverFilter.value);
+                }
+
                 await loadMovementTypes();
                 applyFiltersAndSort(); // Tabloyu render et
                 if (result.truncated) {
