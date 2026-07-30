@@ -28,8 +28,28 @@ window.showToast = function(message, type = 'error') {
 document.addEventListener('DOMContentLoaded', () => {
     const loginForm = document.getElementById('login-form');
     const loginBtn = document.getElementById('login-btn');
-    const btnText = loginBtn.querySelector('.btn-text');
+    const btnText = document.getElementById('auth-btn-text');
     const spinner = loginBtn.querySelector('.spinner');
+    
+    const toggleAuthModeBtn = document.getElementById('toggle-auth-mode');
+    const authTitle = document.getElementById('auth-title');
+    let isRegisterMode = false;
+
+    if (toggleAuthModeBtn) {
+        toggleAuthModeBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            isRegisterMode = !isRegisterMode;
+            if (isRegisterMode) {
+                authTitle.textContent = 'Yeni Hesap Oluştur';
+                btnText.textContent = 'Kayıt Ol';
+                toggleAuthModeBtn.textContent = 'Zaten hesabınız var mı? Giriş yapın.';
+            } else {
+                authTitle.textContent = 'Güvenli Giriş';
+                btnText.textContent = 'Giriş Yap';
+                toggleAuthModeBtn.textContent = 'Hesabınız yok mu? Yeni kayıt oluşturun.';
+            }
+        });
+    }
 
     if (loginForm) {
         loginForm.addEventListener('submit', async (e) => {
@@ -49,8 +69,8 @@ document.addEventListener('DOMContentLoaded', () => {
             spinner.classList.remove('hidden');
 
             try {
-                // Backend API'sine giriş isteği gönder
-                const response = await fetch('/api/login', {
+                const endpoint = isRegisterMode ? '/api/register' : '/api/login';
+                const response = await fetch(endpoint, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'

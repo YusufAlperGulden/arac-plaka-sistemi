@@ -483,7 +483,7 @@ class ManagementApiTests(unittest.TestCase):
         self.assertEqual(before["ActiveTrip"], 0)
         self.assertGreaterEqual(before["Driver"], 3)
         self.assertEqual(before["VehicleReminder"], 0)
-        self.assertEqual(before["AppSetting"], 2)
+        self.assertEqual(before["AppSetting"], 3)
 
 
 if __name__ == "__main__":

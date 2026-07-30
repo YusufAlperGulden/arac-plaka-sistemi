@@ -11,6 +11,7 @@ from PIL import Image
 from sqlalchemy import Numeric, cast, func, literal, or_, text
 from sqlalchemy.exc import IntegrityError
 from werkzeug.middleware.proxy_fix import ProxyFix
+from werkzeug.security import generate_password_hash, check_password_hash
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 
@@ -21,6 +22,7 @@ from models import (
     Driver,
     MovementRecord,
     MovementType,
+    SystemUser,
     Vehicle,
     VehicleReminder,
     VehicleModel,
@@ -120,6 +122,12 @@ USERS_DB = {
     "kullanici": "sifre123"
 }
 ADMIN_USERS = frozenset({"Teknopalas", "admin"})
+
+def is_admin_user(username):
+    if not username:
+        return False
+    user = db.session.scalar(db.select(SystemUser).where(SystemUser.username == username))
+    return user is not None and user.is_admin
 
 VEHICLE_USAGE_PURPOSES = (
     "Periyodik Bakım",
@@ -381,7 +389,6 @@ def require_authenticated(view):
 
     return wrapped
 
-
 def require_admin(view):
     @wraps(view)
     def wrapped(*args, **kwargs):
@@ -391,7 +398,7 @@ def require_admin(view):
                 "success": False,
                 "message": "Bu işlem için giriş yapmalısınız.",
             }), 401
-        if username not in ADMIN_USERS:
+        if not is_admin_user(username):
             return jsonify({
                 "success": False,
                 "message": "Bu işlem için yönetici yetkisi gerekiyor.",
@@ -767,19 +774,55 @@ def login():
     if not data or 'username' not in data or 'password' not in data:
         return jsonify({"success": False, "message": "Eksik bilgi girdiniz."}), 400
         
-    username = data.get('username')
-    password = data.get('password')
+    username = str(data.get('username') or "").strip()
+    password = str(data.get('password') or "").strip()
     
-    if username in USERS_DB and USERS_DB[username] == password:
+    user = db.session.scalar(db.select(SystemUser).where(SystemUser.username == username))
+    
+    if user and check_password_hash(user.password_hash, password):
         session.clear() # Fixation koruması
-        session['user'] = username
+        session['user'] = user.username
         return jsonify({
             "success": True,
             "message": "Giriş başarılı.",
-            "is_admin": username in ADMIN_USERS,
+            "is_admin": user.is_admin,
         }), 200
     else:
         return jsonify({"success": False, "message": "Hatalı Kullanıcı Adı veya Şifre!"}), 401
+
+@app.route('/api/register', methods=['POST'])
+def register():
+    data = request.get_json()
+    if not data or 'username' not in data or 'password' not in data:
+        return jsonify({"success": False, "message": "Eksik bilgi girdiniz."}), 400
+        
+    username = str(data.get('username') or "").strip()
+    password = str(data.get('password') or "").strip()
+    
+    if len(username) < 3:
+        return jsonify({"success": False, "message": "Kullanıcı adı en az 3 karakter olmalıdır."}), 400
+    if len(password) < 4:
+        return jsonify({"success": False, "message": "Şifre en az 4 karakter olmalıdır."}), 400
+        
+    existing_user = db.session.scalar(db.select(SystemUser).where(SystemUser.username == username))
+    if existing_user:
+        return jsonify({"success": False, "message": "Bu kullanıcı adı zaten alınmış."}), 409
+        
+    new_user = SystemUser(
+        username=username,
+        password_hash=generate_password_hash(password),
+        is_admin=False
+    )
+    db.session.add(new_user)
+    db.session.commit()
+    
+    session.clear()
+    session['user'] = new_user.username
+    return jsonify({
+        "success": True,
+        "message": "Kayıt başarılı.",
+        "is_admin": new_user.is_admin,
+    }), 201
 
 @app.route('/api/plates', methods=['GET'])
 def get_plates():
@@ -1307,7 +1350,7 @@ def get_active_trips():
 def manage_drivers():
     if request.method == 'GET':
         include_inactive = (
-            session.get("user") in ADMIN_USERS
+            is_admin_user(session.get("user"))
             and parse_boolean(
                 request.args.get("include_inactive"),
                 default=False,
@@ -1986,7 +2029,7 @@ def manage_maintenance_reminders():
                 VehicleReminder.vehicle_id == vehicle_id
             )
         if not (
-            session.get("user") in ADMIN_USERS
+            is_admin_user(session.get("user"))
             and parse_boolean(
                 request.args.get("include_inactive"),
                 default=False,
@@ -3083,6 +3126,18 @@ def initialize_database():
                     active_trip.driver_id = driver.id
 
         db.session.add(AppSetting(key="feature_seed_v2", value="complete"))
+
+    user_seed_marker = db.session.get(AppSetting, "initial_seed_users_v3")
+    if user_seed_marker is None:
+        for username, password in USERS_DB.items():
+            existing_user = db.session.scalar(db.select(SystemUser).where(SystemUser.username == username))
+            if not existing_user:
+                db.session.add(SystemUser(
+                    username=username,
+                    password_hash=generate_password_hash(password),
+                    is_admin=username in ADMIN_USERS
+                ))
+        db.session.add(AppSetting(key="initial_seed_users_v3", value="complete"))
 
     db.session.commit()
 

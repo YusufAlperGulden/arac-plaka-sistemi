@@ -18,6 +18,14 @@ def configure_sqlite_connection(dbapi_connection, _connection_record):
     cursor.execute("PRAGMA busy_timeout=5000")
     cursor.close()
 
+class SystemUser(db.Model):
+    __tablename__ = "system_users"
+
+    id = db.Column(db.Integer, primary_key=True)
+    username = db.Column(db.String(80), unique=True, nullable=False, index=True)
+    password_hash = db.Column(db.String(256), nullable=False)
+    is_admin = db.Column(db.Boolean, default=False, nullable=False)
+
 
 class Driver(db.Model):
     __tablename__ = "drivers"

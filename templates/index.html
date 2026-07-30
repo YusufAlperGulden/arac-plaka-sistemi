@@ -29,7 +29,7 @@
     <section id="login-section" class="screen-section active">
         <div class="glass-card login-card">
             <div class="login-header">
-                <h2>Güvenli Giriş</h2>
+                <h2 id="auth-title">Güvenli Giriş</h2>
             </div>
             
             <form id="login-form">
@@ -48,11 +48,12 @@
                     ⚠️ CAPSLOCK: AÇIK
                 </div>
                 
-                <div class="login-btn-container">
-                    <button type="submit" class="btn-primary login-btn-blue" id="login-btn">
-                        <span class="btn-text">Giriş Yap</span>
+                <div class="login-btn-container" style="display: flex; flex-direction: column; gap: 12px; align-items: center;">
+                    <button type="submit" class="btn-primary login-btn-blue" id="login-btn" style="width: 100%;">
+                        <span class="btn-text" id="auth-btn-text">Giriş Yap</span>
                         <div class="spinner hidden"></div>
                     </button>
+                    <a href="#" id="toggle-auth-mode" style="color: var(--primary-color); font-size: 0.9rem; text-decoration: none; font-weight: 500;">Hesabınız yok mu? Yeni kayıt oluşturun.</a>
                 </div>
             </form>
         </div>
