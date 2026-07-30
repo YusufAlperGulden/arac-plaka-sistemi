@@ -4587,12 +4587,16 @@ document.addEventListener('DOMContentLoaded', () => {
         
         const brandFilterGrp = document.getElementById('report-brand-filter-group');
         const modelFilterGrp = document.getElementById('report-model-filter-group');
+        const statusFilterGrp = document.getElementById('report-status-filter-group');
+        
         if (currentReportMode === 'vehicle') {
             if (brandFilterGrp) brandFilterGrp.classList.add('hidden');
             if (modelFilterGrp) modelFilterGrp.classList.add('hidden');
+            if (statusFilterGrp) statusFilterGrp.classList.add('hidden');
         } else {
             if (brandFilterGrp) brandFilterGrp.classList.remove('hidden');
             if (modelFilterGrp) modelFilterGrp.classList.remove('hidden');
+            if (statusFilterGrp) statusFilterGrp.classList.remove('hidden');
         }
         
         reportTableBody.innerHTML =
