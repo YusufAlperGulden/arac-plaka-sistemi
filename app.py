@@ -39,7 +39,7 @@ except ImportError:
     genai_types = None
 
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
-GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.0-flash")
+GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.5-flash-lite")
 MAX_OCR_IMAGE_BYTES = 20 * 1024 * 1024
 MAX_OCR_IMAGES = 4
 MAX_OCR_TOTAL_BYTES = 20 * 1024 * 1024
