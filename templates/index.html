@@ -718,7 +718,9 @@
 
                         <label for="action-type-select" style="margin-top: 15px;">Kullanım Amacı</label>
                         <select id="action-type-select" name="action-type-select">
-                            <!-- Options will be populated by JS -->
+                            {% for purpose in usage_purposes %}
+                            <option value="{{ purpose }}" {% if purpose == "Diğer" %}selected{% endif %}>{{ purpose }}</option>
+                            {% endfor %}
                         </select>
                         <button id="add-new-movement-type-btn"
                                 class="btn-outline admin-only selection-shortcut-btn"
