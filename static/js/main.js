@@ -4568,7 +4568,7 @@ document.addEventListener('DOMContentLoaded', () => {
         );
     }
 
-    async function exportAdvancedReport(format) {
+    function exportAdvancedReport(format) {
         let params;
         try {
             params = buildAdvancedReportParams(format);
@@ -4577,47 +4577,18 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        const buttons = [exportCsvBtn, exportXlsxBtn, exportPdfBtn];
-        buttons.forEach(button => {
-            button.disabled = true;
-        });
-        try {
-            const response = await fetch(
-                `/api/reports/export?${params.toString()}`
-            );
-            if (!response.ok) {
-                const result = await response.json().catch(() => ({}));
-                throw new Error(
-                    result.message || 'Rapor indirilemedi.'
-                );
-            }
-            const blob = await response.blob();
-            const disposition = response.headers.get(
-                'Content-Disposition'
-            ) || '';
-            const fileNameMatch = disposition.match(
-                /filename\*?=(?:UTF-8''|")?([^";]+)/i
-            );
-            const fallbackExtension = format === 'xlsx' ? 'xlsx' : format;
-            const fileName = fileNameMatch
-                ? decodeURIComponent(fileNameMatch[1].replace(/"/g, ''))
-                : `hareket-raporu.${fallbackExtension}`;
-            const objectUrl = URL.createObjectURL(blob);
-            const link = document.createElement('a');
-            link.href = objectUrl;
-            link.download = fileName;
-            document.body.appendChild(link);
-            link.click();
-            link.remove();
-            setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
-            window.showToast('Rapor indirmeye hazır.', 'success');
-        } catch (error) {
-            window.showToast(error.message, 'error');
-        } finally {
-            buttons.forEach(button => {
-                button.disabled = false;
-            });
-        }
+        const exportUrl = `/api/reports/export?${params.toString()}`;
+        
+        // Open the download URL in a hidden iframe or same window
+        // The server sends Content-Disposition: attachment, so it won't replace the page
+        const link = document.createElement('a');
+        link.href = exportUrl;
+        link.target = '_blank';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        
+        window.showToast('Rapor indiriliyor...', 'success');
     }
 
     async function fetchAndShowReport(
