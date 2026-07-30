@@ -890,6 +890,7 @@ document.addEventListener('DOMContentLoaded', () => {
             
             if (item.is_available) {
                 const detailValues = [
+                    ['Durum', 'Kullanıma Hazır'],
                     ['Güncel KM', item.start_mileage],
                 ];
                 detailValues.forEach(([label, value]) => {
@@ -901,7 +902,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
 
                 actions.appendChild(createActionButton(
-                    'Kullanıma Al',
+                    'Aracı Al',
                     'btn-secondary',
                     () => startProcess(
                         'Araç Alma',
