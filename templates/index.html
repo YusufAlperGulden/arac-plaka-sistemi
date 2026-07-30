@@ -61,7 +61,10 @@
 
 
     <!-- İşlem Seçim Ekranı (Action Selection Section) -->
-    <section id="action-selection-section" class="screen-section hidden">
+    <section id="action-selection-section" class="screen-section hidden" style="position: relative;">
+        <!-- Çıkış Butonu Sol Üste Taşındı -->
+        <button id="action-logout-btn" class="btn-secondary" style="position: absolute; top: 20px; left: 20px; padding: 10px 20px; font-size: 0.9rem; width: auto; z-index: 50;">🚪 Çıkış Yap</button>
+        
         <div class="glass-card selection-wrapper">
             <div class="login-header">
                 <h2>İşlem Seçin</h2>
@@ -92,9 +95,6 @@
             <button id="action-report-btn" class="btn-outline" style="width: 100%; margin-top: 20px; padding: 15px; font-weight: 600;">
                 📊 Yönetim / Rapor
             </button>
-
-            <!-- Çıkış Butonu En Alta Taşındı -->
-            <button id="action-logout-btn" class="btn-secondary" style="margin-top: 30px; width: 100%;">🚪 Çıkış Yap</button>
         </div>
     </section>
 
