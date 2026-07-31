@@ -132,7 +132,7 @@ def is_admin_user(username):
 VEHICLE_USAGE_PURPOSES = (
     "Periyodik Bakım",
     "Kurum İçi Operasyonlar",
-    "Diğer",
+    "Araç Kullanımda",
     "Müşteri Ziyareti",
     "Servis Amaçlı Kullanım",
     "Şahsi Kullanım",
@@ -141,7 +141,7 @@ VEHICLE_USAGE_PURPOSES = (
 VEHICLE_USAGE_PURPOSE_DESCRIPTIONS = {
     "Periyodik Bakım": "Araç bakımı ve muayenesi için kullanımlar",
     "Kurum İçi Operasyonlar": "Banka, gümrük ve noter için kullanımlar",
-    "Diğer": "Diğer kullanım amaçları",
+    "Araç Kullanımda": "Araç Kullanımda kullanım amaçları",
     "Müşteri Ziyareti": "Satış amaçlı veya genel müşteri ziyaretleri",
     "Servis Amaçlı Kullanım": "Servis ve personel ulaşımı için kullanımlar",
     "Şahsi Kullanım": "Şahsi kullanımlar",
@@ -514,7 +514,7 @@ def serialize_movement_type(movement_type):
         "requires_service_form_no": (
             movement_type.requires_service_form_no
         ),
-        "locked": movement_type.name == "Diğer",
+        "locked": movement_type.name == "Araç Kullanımda",
     }
 
 
@@ -710,7 +710,7 @@ ACTIVE_TRIPS = {}
 # Tamamlanmış (veya mock) kayıtlar
 RECORDS_DB = [
     {
-        "action_type": "Diğer",
+        "action_type": "Araç Kullanımda",
         "add_date": "19.01.2026 15:03:40",
         "vehicle_name": "FORD 2016 TRANSIT/TOURNEO",
         "plate": "34KM4969",
@@ -723,7 +723,7 @@ RECORDS_DB = [
         "notes": "akçelili"
     },
     {
-        "action_type": "Diğer",
+        "action_type": "Araç Kullanımda",
         "add_date": "19.01.2026 15:04:13",
         "vehicle_name": "RENAULT 2016 CLIO",
         "plate": "34EZS794",
@@ -762,7 +762,7 @@ RECORDS_DB = [
         "notes": "banka"
     },
     {
-        "action_type": "Diğer",
+        "action_type": "Araç Kullanımda",
         "add_date": "19.01.2026 15:12:16",
         "vehicle_name": "RENAULT 2016 CLIO",
         "plate": "34EZS794",
@@ -883,7 +883,7 @@ def save_record():
     
     plate = normalize_turkish_plate(data.get('plate'))
     action = data.get('action') # 'pickup' veya 'dropoff'
-    action_type = str(data.get('action_type') or 'Diğer').strip()
+    action_type = str(data.get('action_type') or 'Araç Kullanımda').strip()
     mileage = normalize_mileage(data.get('mileage'))
     user = str(data.get('user') or '').strip()
     notes = str(data.get('notes') or '').strip()
@@ -1049,10 +1049,10 @@ def save_record():
             driver_id = active_trip.driver_id
             requested_act_type = (
                 active_trip.action_type
-                if active_trip.action_type != 'Diğer'
+                if active_trip.action_type != 'Araç Kullanımda'
                 else action_type
             )
-            allow_inactive_type = active_trip.action_type != 'Diğer'
+            allow_inactive_type = active_trip.action_type != 'Araç Kullanımda'
             act_type = canonical_movement_type_name(
                 requested_act_type,
                 allow_inactive=allow_inactive_type,
@@ -1102,7 +1102,7 @@ def save_record():
             resolved_service_form_no,
             allow_inactive=(
                 active_trip is not None
-                and active_trip.action_type != 'Diğer'
+                and active_trip.action_type != 'Araç Kullanımda'
             ),
         )
         if required_field_error:
@@ -1281,11 +1281,11 @@ def update_movement_type(movement_type_id):
         data.get("active"),
         default=movement_type.active,
     )
-    if movement_type.name == "Diğer":
-        if requested_name != "Diğer" or not requested_active:
+    if movement_type.name == "Araç Kullanımda":
+        if requested_name != "Araç Kullanımda" or not requested_active:
             return jsonify({
                 "success": False,
-                "message": "Diğer sistem hareket türü değiştirilemez veya pasifleştirilemez.",
+                "message": "Araç Kullanımda sistem hareket türü değiştirilemez veya pasifleştirilemez.",
             }), 400
     if not requested_name:
         return jsonify({

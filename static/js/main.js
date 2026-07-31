@@ -819,8 +819,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 )
                     ? previousAction
                     : (
-                        activeTypes.some(item => item.name === 'Diğer')
-                            ? 'Diğer'
+                        activeTypes.some(item => item.name === 'Araç Kullanımda')
+                            ? 'Araç Kullanımda'
                             : activeTypes[0]?.name || ''
                     ),
                 valueKey: 'name',
@@ -1183,7 +1183,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             String(reminder.vehicle_id)
                         );
                         maintenanceReminderTypeInput.value =
-                            reminder.reminder_type || 'Diğer';
+                            reminder.reminder_type || 'Araç Kullanımda';
                         maintenanceTitleInput.value = reminder.title || '';
                         maintenanceDueDateInput.value =
                             reminder.due_date || '';
@@ -2225,9 +2225,9 @@ document.addEventListener('DOMContentLoaded', () => {
             ))
                 ? preselectedActionType
                 : Array.from(actionTypeSelect.options).some(
-                    option => option.value === 'Diğer'
+                    option => option.value === 'Araç Kullanımda'
                 )
-                    ? 'Diğer'
+                    ? 'Araç Kullanımda'
                     : actionTypeSelect.options[0]?.value || ''
         );
         mileageInput.value = '';
@@ -4804,7 +4804,7 @@ document.addEventListener('DOMContentLoaded', () => {
         records.forEach(record => {
             const tr = document.createElement('tr');
             const actionTypeDisplay = record.status_key === 'active'
-                ? `${record.action_type || 'Diğer'} • Aktif`
+                ? `${record.action_type || 'Araç Kullanımda'} • Aktif`
                 : record.action_type || '-';
             const values = [
                 { value: actionTypeDisplay },
@@ -4846,7 +4846,7 @@ document.addEventListener('DOMContentLoaded', () => {
             heading.append(title, subtitle);
             const purposeBadge = createStatusBadge(
                 true,
-                record.action_type || 'Diğer'
+                record.action_type || 'Araç Kullanımda'
             );
             purposeBadge.classList.add('purpose');
             header.append(heading, purposeBadge);
