@@ -449,14 +449,17 @@ document.addEventListener('DOMContentLoaded', () => {
             const activeCount = (data.counts && data.counts.active) ? data.counts.active : 0;
             
             if (dropoffBtn) {
+                const dropoffDesc = dropoffBtn.querySelector('p');
                 if (activeCount === 0) {
                     dropoffBtn.disabled = true;
                     dropoffBtn.style.opacity = '0.4';
                     dropoffBtn.style.cursor = 'not-allowed';
+                    if (dropoffDesc) dropoffDesc.textContent = 'Teslim edilecek araç yoktur.';
                 } else {
                     dropoffBtn.disabled = false;
                     dropoffBtn.style.opacity = '1';
                     dropoffBtn.style.cursor = 'pointer';
+                    if (dropoffDesc) dropoffDesc.textContent = 'Kullanılan aracın filoya geri getirilmesi';
                 }
             }
             
