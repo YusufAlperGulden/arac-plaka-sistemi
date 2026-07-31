@@ -894,16 +894,22 @@ def save_record():
         return jsonify({"success": False, "message": "Eksik veri gönderildi."}), 400
     if action not in {"pickup", "dropoff"}:
         return jsonify({"success": False, "message": "Geçersiz işlem."}), 400
-    if mileage is None:
+        
+    if action == 'dropoff' and mileage is None:
         return jsonify({
             "success": False,
-            "message": "Kilometre sıfır veya daha büyük tam sayı olmalıdır.",
+            "message": "Teslim etme işlemi için kilometre girmelisiniz.",
         }), 400
 
     lock_plate_transaction(plate)
     vehicle = db.session.scalar(
         db.select(Vehicle).where(Vehicle.plate == plate)
     )
+    if action == 'pickup':
+        if vehicle and vehicle.current_mileage is not None:
+            mileage = vehicle.current_mileage
+        else:
+            mileage = mileage if mileage is not None else 0
     vehicle_name = get_database_vehicle_name(vehicle)
     current_time = now_utc()
     created_by = str(session.get("user") or "").strip()
