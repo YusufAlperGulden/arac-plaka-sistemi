@@ -5191,6 +5191,7 @@ document.addEventListener('DOMContentLoaded', () => {
         
         window.showToast('Başarıyla çıkış yapıldı.', 'success');
     }
+    let currentBase64Photo = '';
     const profilePhotoInput = document.getElementById('profile-photo-input');
     const profileUpdateForm = document.getElementById('profile-update-form');
 
@@ -5302,7 +5303,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    let currentBase64Photo = '';
+    
 
     window.openProfileModal = function(e) {
         if (e) {
