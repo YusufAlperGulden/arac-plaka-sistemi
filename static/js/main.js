@@ -4354,6 +4354,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Rapor state
     let currentRecords = [];
     let reportFilterVehicles = [];
+    let reportFilterPlates = [];
     let currentReportMode = 'recent';
     const REPORT_COLUMN_COUNT = 13;
     const filterActionType = document.getElementById('filter-action-type');
@@ -4483,10 +4484,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function populateReportPlateFilter(selectedValue = '') {
-        const plates = new Set();
-        reportFilterVehicles.forEach(vehicle => {
-            if (vehicle.plate) plates.add(vehicle.plate);
-        });
+        const plates = new Set(reportFilterPlates);
         const items = Array.from(plates).map(p => ({ id: p, name: p })).sort(
             (left, right) => left.name.localeCompare(right.name, 'tr')
         );
@@ -4554,6 +4552,7 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             const result = await apiRequest('/api/reports/filter-options');
             driversCache = Array.from(result.drivers || []);
+            reportFilterPlates = Array.from(result.plates || []);
             populateReportDriverFilter(selectedDriver);
             reportFilterVehicles = Array.from(result.models || []).map(
                 vehicleModel => ({

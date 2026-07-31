@@ -2869,8 +2869,16 @@ def get_report_filter_options():
             VehicleModel.id,
         )
     ).all()
+    plates = db.session.scalars(
+        db.select(Vehicle.plate)
+        .where(Vehicle.plate != None)
+        .where(Vehicle.plate != '')
+        .distinct()
+        .order_by(Vehicle.plate)
+    ).all()
     return jsonify({
         "success": True,
+        "plates": list(plates),
         "drivers": [
             {
                 "id": driver.id,
