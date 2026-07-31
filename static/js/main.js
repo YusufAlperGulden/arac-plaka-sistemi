@@ -4211,19 +4211,26 @@ document.addEventListener('DOMContentLoaded', () => {
             step1Dot.classList.add('completed');
             step2Dot.classList.add('active');
             
-            instructionText.textContent = 'Kilometreyi okutun veya manuel olarak girin.';
-            cameraOverlayText.textContent = 'Kilometreyi okutun';
+            stepPlateContainer.classList.add('hidden');
             
-            manualTitle.textContent = 'Kilometre ve İşlem Bilgileri';
+            if (state.currentAction === 'pickup') {
+                instructionText.textContent = 'İşlem bilgilerini girin veya kontrol edin.';
+                cameraOverlayText.textContent = 'Kamera gerekmiyor';
+                manualTitle.textContent = 'İşlem Bilgileri';
+                stepMileageContainer.classList.add('hidden');
+            } else {
+                instructionText.textContent = 'Kilometreyi okutun veya manuel olarak girin.';
+                cameraOverlayText.textContent = 'Kilometreyi okutun';
+                manualTitle.textContent = 'Kilometre ve İşlem Bilgileri';
+                stepMileageContainer.classList.remove('hidden');
+            }
+
             manualSubtitle.textContent =
                 (
                     `Plaka: ${getVehicleDisplayLabel(state.plate)}`
                     + ` | Sürücü: ${state.driverName}`
                     + ` | Kullanım: ${state.actionType}`
                 );
-            
-            stepPlateContainer.classList.add('hidden');
-            stepMileageContainer.classList.remove('hidden');
             
             processBtnText.textContent = 'İşlemi Tamamla';
             updateStepTwoAvailability();
@@ -4273,17 +4280,25 @@ document.addEventListener('DOMContentLoaded', () => {
             
         } else if (state.currentStep === 2) {
             if (
-                !mileageInput.value.trim()
+                (state.currentAction === 'dropoff' && !mileageInput.value.trim())
                 || (requestNoInput.required && !requestNoInput.value.trim())
                 || (
                     serviceFormNoInput.required
                     && !serviceFormNoInput.value.trim()
                 )
             ) {
-                stepMileageContainer.querySelector(':invalid')?.reportValidity();
+                if (state.currentAction === 'dropoff') {
+                    stepMileageContainer.querySelector(':invalid')?.reportValidity();
+                }
                 return;
             }
-            state.mileage = mileageInput.value.trim();
+            
+            if (state.currentAction === 'pickup') {
+                const vehicle = registeredVehiclesByPlate.get(state.plate);
+                state.mileage = vehicle ? (vehicle.current_mileage || 0) : 0;
+            } else {
+                state.mileage = mileageInput.value.trim();
+            }
             state.requestNo = requestNoInput.value.trim();
             state.serviceFormNo = serviceFormNoInput.value.trim();
             state.notes = notesInput.value.trim();
