@@ -5289,7 +5289,10 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (typeof updateProfileUI === 'function') updateProfileUI();
                     
                     const profileModal = document.getElementById('profile-modal');
-                    if (profileModal) profileModal.classList.remove('active');
+                    if (profileModal) {
+                        profileModal.classList.remove('active');
+                        profileModal.style.display = 'none';
+                    }
                 } else {
                     window.showToast(result.message || 'Profil güncellenirken hata oluştu.', 'error');
                 }
@@ -5351,6 +5354,9 @@ document.addEventListener('DOMContentLoaded', () => {
             e.stopPropagation();
         }
         const profileModal = document.getElementById('profile-modal');
-        if (profileModal) profileModal.classList.remove('active');
+        if (profileModal) {
+            profileModal.classList.remove('active');
+            profileModal.style.display = 'none';
+        }
     };
 });
