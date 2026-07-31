@@ -415,7 +415,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const response = await fetch('/api/active-trips');
             if (!response.ok) return;
             const data = await response.json();
-            if (data.active_trips && data.active_trips.length === 0) {
+            if (data.counts && data.counts.active === 0) {
                 dropoffBtn.disabled = true;
                 dropoffBtn.style.opacity = '0.4';
                 dropoffBtn.style.cursor = 'not-allowed';
@@ -609,8 +609,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 const res = await fetch('/api/active-trips');
                 if (res.ok) {
                     const data = await res.json();
-                    if (data.active_trips) {
-                        activeDriverIds = new Set(data.active_trips.map(t => String(t.driver_id)));
+                    if (data.items && data.counts) {
+                        const activeTripsOnly = data.items.slice(0, data.counts.active);
+                        activeDriverIds = new Set(activeTripsOnly.map(t => String(t.driver_id)));
                     }
                 }
             }
@@ -4881,8 +4882,9 @@ document.addEventListener('DOMContentLoaded', () => {
             const activeRes = await fetch('/api/active-trips');
             if (activeRes.ok) {
                 const data = await activeRes.json();
-                if (data.active_trips) {
-                    activePlates = new Set(data.active_trips.map(t => t.plate));
+                if (data.items && data.counts) {
+                    const activeTripsOnly = data.items.slice(0, data.counts.active);
+                    activePlates = new Set(activeTripsOnly.map(t => t.plate));
                 }
             }
         } catch (e) {
