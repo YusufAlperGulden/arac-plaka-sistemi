@@ -391,7 +391,12 @@ document.addEventListener('DOMContentLoaded', () => {
         sections.forEach(sec => {
             sec.classList.remove('active');
             sec.classList.add('hidden');
-        });
+        
+    const closeProfileBtn = document.getElementById('close-profile-modal');
+    if (closeProfileBtn) {
+        closeProfileBtn.addEventListener('click', (e) => window.closeProfileModal(e));
+    }
+});
         
         // Kamera açıksa kapat
         if (window.cameraController) {
@@ -5304,11 +5309,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 spinner.classList.add('hidden');
             }
         });
-    }
-
-    const closeProfileBtn = document.getElementById('close-profile-modal');
-    if (closeProfileBtn) {
-        closeProfileBtn.addEventListener('click', window.closeProfileModal);
     }
 
     window.openProfileModal = function(e) {
