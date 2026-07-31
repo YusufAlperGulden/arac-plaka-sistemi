@@ -1,11 +1,11 @@
 {
-  "name": "Araç Plaka Sistemi",
+  "name": "Ara\u00e7 Plaka Sistemi",
   "short_name": "Plaka Sistemi",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#1e293b",
   "theme_color": "#3b82f6",
-  "description": "Otomatik Plaka Tanıma Sistemi",
+  "description": "Otomatik Plaka Tan\u0131ma Sistemi",
   "icons": [
     {
       "src": "/static/icon-192x192.png",
@@ -16,6 +16,27 @@
       "src": "/static/icon-512x512.png",
       "sizes": "512x512",
       "type": "image/png"
+    }
+  ],
+  "id": "/",
+  "orientation": "portrait",
+  "categories": [
+    "business",
+    "productivity",
+    "utilities"
+  ],
+  "screenshots": [
+    {
+      "src": "/static/icon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "form_factor": "wide"
+    },
+    {
+      "src": "/static/icon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "form_factor": "narrow"
     }
   ]
 }
