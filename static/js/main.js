@@ -1060,6 +1060,16 @@ document.addEventListener('DOMContentLoaded', () => {
                 ));
             }
             
+            actions.appendChild(createActionButton(
+                '📊 Rapor',
+                'btn-outline',
+                () => {
+                    currentReportMode = 'vehicle';
+                    reportTitle.textContent = `🚗 Araç Raporu: ${getVehicleDisplayLabel(item.plate)}`;
+                    fetchAndShowReport(`/api/reports/plate/${encodeURIComponent(item.plate)}`);
+                }
+            ));
+            
             const contentDiv = document.createElement('div');
             contentDiv.className = 'management-item-content';
             contentDiv.append(header, details);
