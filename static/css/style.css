@@ -1317,7 +1317,7 @@ button {
 
 .close-modal:hover,
 .close-modal:focus {
-    color: white;
+    color: #ff4444;
     text-decoration: none;
 }
 

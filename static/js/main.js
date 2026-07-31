@@ -5306,7 +5306,10 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    
+    const closeProfileBtn = document.getElementById('close-profile-modal');
+    if (closeProfileBtn) {
+        closeProfileBtn.addEventListener('click', window.closeProfileModal);
+    }
 
     window.openProfileModal = function(e) {
         if (e) {
