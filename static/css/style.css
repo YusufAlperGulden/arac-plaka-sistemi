@@ -22,13 +22,13 @@
     --glass-bg: rgba(30, 41, 59, 0.7);
     --glass-border: rgba(255, 255, 255, 0.1);
     --glass-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
-    --input-bg: var(--input-bg);
-    --input-focus-bg: var(--table-header-bg);
-    --table-bg: var(--table-bg);
-    --table-header-bg: var(--table-header-bg);
-    --item-bg: var(--item-bg);
+    --input-bg: rgba(15, 23, 42, 0.6);
+    --input-focus-bg: rgba(15, 23, 42, 0.8);
+    --table-bg: rgba(15, 23, 42, 0.4);
+    --table-header-bg: rgba(15, 23, 42, 0.8);
+    --item-bg: rgba(15, 23, 42, 0.55);
     --item-bg-hover: rgba(15, 23, 42, 0.7);
-    --camera-container-bg: var(--camera-container-bg);
+    --camera-container-bg: linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%);
 
     
     /* Fontlar ve Geçişler */
