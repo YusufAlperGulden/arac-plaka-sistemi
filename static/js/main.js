@@ -925,11 +925,15 @@ document.addEventListener('DOMContentLoaded', () => {
             title.textContent = item.display_label;
             driver.textContent = `Sürücü: ${item.driver}`;
             titleContainer.append(title, driver);
-            const purposeBadge = createStatusBadge(true, item.action_type);
+            header.append(titleContainer);
+
+            const statusContainer = document.createElement('div');
+            statusContainer.className = 'item-status';
+            const purposeBadge = createStatusBadge(true, item.is_available ? 'Müsait' : 'Kullanımda');
             if (!item.is_available) {
                 purposeBadge.classList.add('purpose');
             }
-            header.append(titleContainer, purposeBadge);
+            statusContainer.appendChild(purposeBadge);
 
             const details = document.createElement('div');
             details.className = 'management-item-details';
@@ -997,7 +1001,7 @@ document.addEventListener('DOMContentLoaded', () => {
             contentDiv.className = 'management-item-content';
             contentDiv.append(header, details);
             
-            card.append(contentDiv, actions);
+            card.append(contentDiv, statusContainer, actions);
             activeTripList.appendChild(card);
         });
     }
