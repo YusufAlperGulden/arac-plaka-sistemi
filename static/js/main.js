@@ -4367,7 +4367,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 driverSelect.selectedOptions[0]?.dataset.driverName
                 || state.username
             );
-            window.showToast('Plaka onaylandı. Lütfen kilometre girin.', 'success');
+            window.showToast('PLAKA ONAYLANDI', 'success');
             state.currentStep = 2;
             renderStep();
             
@@ -5312,4 +5312,3 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 });
-
