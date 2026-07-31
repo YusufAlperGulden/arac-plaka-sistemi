@@ -123,23 +123,26 @@
     </section>
 
 
+    <!-- Tüm Ekranlarda Görünecek Üst Bar (Login Hariç) -->
+    <div id="global-top-bar" style="position: fixed; top: 0; left: 0; width: 100%; height: 70px; display: none; justify-content: space-between; align-items: center; padding: 0 20px; z-index: 1000; pointer-events: none;">
+        <div style="pointer-events: auto;">
+            <button id="action-logout-btn" class="btn-secondary" style="padding: 10px 20px; font-size: 0.9rem; width: auto;">🚪 Çıkış Yap</button>
+        </div>
+        <div style="pointer-events: auto; display: flex; gap: 15px; align-items: center;">
+            <button id="header-profile-btn" class="profile-header-btn" onclick="window.openProfileModal(event)" style="padding: 5px 15px; font-size: 0.9rem; width: auto; display: flex; align-items: center; gap: 10px; background: rgba(255, 255, 255, 0.1); border: 1px solid rgba(255, 255, 255, 0.2); border-radius: 20px; cursor: pointer; color: var(--text-primary); transition: all 0.3s ease;">
+                <span id="header-profile-name" style="font-weight: 500;">Profil</span>
+                <img id="header-profile-img" src="" alt="Profil" style="width: 32px; height: 32px; border-radius: 50%; object-fit: cover; background: var(--surface-light); display: none;">
+                <div id="header-profile-placeholder" style="width: 32px; height: 32px; border-radius: 50%; background: var(--primary-color); display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 14px;">?</div>
+            </button>
+            <button id="theme-toggle-btn" class="glass-panel" onclick="toggleTheme()" style="padding: 5px 15px; font-size: 0.9rem; width: auto; border-radius: 20px; display: flex; align-items: center; justify-content: center; cursor: pointer; border: 1px solid rgba(255, 255, 255, 0.2); background: rgba(255, 255, 255, 0.1); color: var(--text-primary); transition: all 0.3s ease; gap: 8px;">
+                <span id="theme-text">Koyu</span>
+                <span id="theme-icon">🌙</span>
+            </button>
+        </div>
+    </div>
+
     <!-- İşlem Seçim Ekranı (Action Selection Section) -->
     <section id="action-selection-section" class="screen-section hidden" style="position: relative;">
-        <!-- Çıkış Butonu Sol Üste Taşındı -->
-        <button id="action-logout-btn" class="btn-secondary" style="position: absolute; top: 20px; left: 20px; padding: 10px 20px; font-size: 0.9rem; width: auto; z-index: 50;">🚪 Çıkış Yap</button>
-        
-        <!-- Tema Değiştirme Butonu -->
-        <button id="theme-toggle-btn" class="glass-panel" onclick="toggleTheme()" style="position: absolute; top: 20px; right: 20px; padding: 5px 15px; font-size: 0.9rem; width: auto; border-radius: 20px; z-index: 50; display: flex; align-items: center; justify-content: center; cursor: pointer; border: 1px solid rgba(255, 255, 255, 0.2); background: rgba(255, 255, 255, 0.1); color: var(--text-primary); transition: all 0.3s ease; gap: 8px;">
-            <span id="theme-text">Koyu</span>
-            <span id="theme-icon">🌙</span>
-        </button>
-
-        <!-- Profil Butonu Sağ Üste -->
-        <button id="header-profile-btn" class="profile-header-btn" onclick="window.openProfileModal(event)" style="position: absolute; top: 20px; right: 130px; padding: 5px 15px; font-size: 0.9rem; width: auto; z-index: 50; display: flex; align-items: center; gap: 10px; background: rgba(255, 255, 255, 0.1); border: 1px solid rgba(255, 255, 255, 0.2); border-radius: 20px; cursor: pointer; color: var(--text-primary); transition: all 0.3s ease;">
-            <span id="header-profile-name" style="font-weight: 500;">Profil</span>
-            <img id="header-profile-img" src="" alt="Profil" style="width: 32px; height: 32px; border-radius: 50%; object-fit: cover; background: var(--surface-light); display: none;">
-            <div id="header-profile-placeholder" style="width: 32px; height: 32px; border-radius: 50%; background: var(--primary-color); display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 14px;">?</div>
-        </button>
 
         <div class="glass-card selection-wrapper">
             <div class="login-header">
@@ -916,7 +919,7 @@
     <!-- Tesseract.js for OCR -->
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
     <script src="/static/js/ocr-utils.js?v=24"></script>
-    <script src="/static/js/main.js?v=62"></script>
+    <script src="/static/js/main.js?v=63"></script>
 
     <script>
         // Sayfa değiştiğinde ana başlığı (Fatura İşleme Sistemi benzeri) gizle/göster

@@ -134,6 +134,7 @@ body.light-mode {
     width: 100%;
     align-items: center;
     justify-content: center;
+    padding-top: 70px; /* Leave space for global top bar */
     animation: fadeIn 0.5s ease-in-out;
 }
 

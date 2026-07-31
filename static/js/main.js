@@ -56,6 +56,17 @@ document.addEventListener('DOMContentLoaded', () => {
     // ---- EKRAN BÖLÜMLERİ (SECTIONS) ----
     const loginSection = document.getElementById('login-section');
     const actionSection = document.getElementById('action-selection-section');
+    
+    // Global Top Bar logic
+    const globalTopBar = document.getElementById('global-top-bar');
+    if (globalTopBar && loginSection) {
+        const observer = new MutationObserver(() => {
+            globalTopBar.style.display = loginSection.classList.contains('hidden') ? 'flex' : 'none';
+        });
+        observer.observe(loginSection, { attributes: true, attributeFilter: ['class'] });
+        globalTopBar.style.display = loginSection.classList.contains('hidden') ? 'flex' : 'none';
+    }
+
     const dashboardSection = document.getElementById('dashboard-section');
     const reportsMenuSection = document.getElementById('reports-menu-section');
     const vehicleReportSelectionSection = document.getElementById('vehicle-report-selection-section');
