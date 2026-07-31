@@ -48,7 +48,7 @@ document.addEventListener('DOMContentLoaded', () => {
         'maintenance-reminders-section'
     );
     
-    // ---- İŞLEM SEÇİM EKRANI BUTONLARI ----
+    // ---- İÅLEM SEÇİM EKRANI BUTONLARI ----
     const pickupBtn = document.getElementById('action-pickup');
     const dropoffBtn = document.getElementById('action-dropoff');
     const activeVehiclesBtn = document.getElementById('active-vehicles-btn');
@@ -237,7 +237,7 @@ document.addEventListener('DOMContentLoaded', () => {
     );
     
     
-    // ---- DASHBOARD (İŞLEM) EKRANI UI ELEMENTLERİ ----
+    // ---- DASHBOARD (İÅLEM) EKRANI UI ELEMENTLERİ ----
     const dashboardTitle = document.getElementById('dashboard-title');
     const backToActionsBtn = document.getElementById('back-to-actions-btn');
     const step1Dot = document.getElementById('step-1-dot');
@@ -274,6 +274,8 @@ document.addEventListener('DOMContentLoaded', () => {
     let state = {
         username: null,
         isAdmin: false,
+        fullName: null,
+        profilePhoto: null,
         currentAction: null, // 'pickup' veya 'dropoff'
         currentStep: 1,      // 1: Plaka, 2: Kilometre
         plate: null,
@@ -298,6 +300,42 @@ document.addEventListener('DOMContentLoaded', () => {
     let fleetReturnContext = null;
     let driverReturnContext = null;
     let movementTypeReturnContext = null;
+
+    window.switchToDashboard = function(username, isAdmin = false, fullName = null, profilePhoto = null) {
+        state.username = username;
+        state.isAdmin = Boolean(isAdmin);
+        state.fullName = fullName;
+        state.profilePhoto = profilePhoto;
+        updateProfileUI();
+        updateAdminVisibility();
+        loadMovementTypes();
+        loadDriversForProcess();
+        showActionSelection();
+    };
+
+    function updateProfileUI() {
+        const nameSpan = document.getElementById('header-profile-name');
+        const imgEl = document.getElementById('header-profile-img');
+        const placeholderEl = document.getElementById('header-profile-placeholder');
+        
+        if (!nameSpan || !imgEl || !placeholderEl) return;
+        
+        const displayName = state.fullName || state.username || 'Profil';
+        nameSpan.textContent = displayName;
+        
+        if (state.profilePhoto) {
+            imgEl.src = state.profilePhoto;
+            imgEl.style.display = 'block';
+            placeholderEl.style.display = 'none';
+        } else {
+            imgEl.src = '';
+            imgEl.style.display = 'none';
+            placeholderEl.style.display = 'flex';
+            if (displayName) {
+                placeholderEl.textContent = displayName.charAt(0).toUpperCase();
+            }
+        }
+    }
 
     function formatPlateForDisplay(value) {
         const parsed = parseTurkishPlate(
@@ -376,7 +414,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 vehicle.current_mileage === null
                 || vehicle.current_mileage === undefined
                     ? ''
-                    : ` • Güncel KM: ${vehicle.current_mileage}`
+                    : ` â€¢ Güncel KM: ${vehicle.current_mileage}`
             )
         );
         selectedVehicleInfo.classList.remove('hidden');
@@ -400,15 +438,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // Global: Giriş sonrası tetiklenir (auth.js)
-    window.switchToDashboard = function(username, isAdmin = false) {
-        state.username = username;
-        state.isAdmin = Boolean(isAdmin);
-        updateAdminVisibility();
-        loadMovementTypes();
-        loadDriversForProcess();
-        showActionSelection();
-    };
-
     // İşlem Seçimi Ekranını Göster
     async function updateDropoffButtonVisibility() {
         const dropoffBtn = document.getElementById('action-dropoff');
@@ -531,7 +560,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function getDriverDisplayLabel(driver) {
         const fullName = String(driver?.full_name || '').trim();
         const employeeNo = String(driver?.employee_no || '').trim();
-        return employeeNo ? `${fullName} • ${employeeNo}` : fullName;
+        return employeeNo ? `${fullName} â€¢ ${employeeNo}` : fullName;
     }
 
     async function fetchDrivers({ includeInactive = false } = {}) {
@@ -799,8 +828,8 @@ document.addEventListener('DOMContentLoaded', () => {
         driverActiveInput.checked = true;
         driverActiveInput.disabled = Boolean(driverReturnContext);
         backFromDriverManagementBtn.textContent = driverReturnContext
-            ? '← İşleme Dön'
-            : '⬅ Geri';
+            ? 'â† İşleme Dön'
+            : 'â¬… Geri';
         driverRegistrationReturnNote.classList.toggle(
             'hidden',
             !driverReturnContext
@@ -872,7 +901,7 @@ document.addEventListener('DOMContentLoaded', () => {
             );
             databaseStatusText.textContent = result.persistent_database
                 ? 'Kalıcı PostgreSQL bağlantısı aktif.'
-                : 'Yerel SQLite kullanılıyor • Render için DATABASE_URL bağlantısı gerekli.';
+                : 'Yerel SQLite kullanılıyor â€¢ Render için DATABASE_URL bağlantısı gerekli.';
         } catch (error) {
             databaseStatusText.classList.add('warning');
             databaseStatusText.textContent =
@@ -915,7 +944,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 activeTripList,
                 searchValue
                     ? 'Aramanızla eşleşen devam eden kullanım bulunamadı.'
-                    : 'Şu anda devam eden bir araç kullanımı bulunmuyor.'
+                    : 'Åu anda devam eden bir araç kullanımı bulunmuyor.'
             );
             return;
         }
@@ -1474,7 +1503,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 ? `Plaka anahtarı: ${vehicle.plate}`
                 : (
                     `Plaka anahtarı: ${vehicle.plate}`
-                    + ` • Güncel KM: ${vehicle.current_mileage}`
+                    + ` â€¢ Güncel KM: ${vehicle.current_mileage}`
                 );
             text.append(title, subtitle);
             header.append(text, createStatusBadge(vehicle.active));
@@ -1587,8 +1616,8 @@ document.addEventListener('DOMContentLoaded', () => {
         vehicleActiveInput.checked = true;
         vehicleActiveInput.disabled = Boolean(fleetReturnContext);
         backFromFleetManagementBtn.textContent = fleetReturnContext
-            ? '← İşleme Dön'
-            : '⬅ Geri';
+            ? 'â† İşleme Dön'
+            : 'â¬… Geri';
         vehicleRegistrationReturnNote.classList.toggle(
             'hidden',
             !fleetReturnContext
@@ -1628,7 +1657,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         fleetReturnContext = null;
         vehicleActiveInput.disabled = false;
-        backFromFleetManagementBtn.textContent = '⬅ Geri';
+        backFromFleetManagementBtn.textContent = 'â¬… Geri';
         vehicleRegistrationReturnNote.classList.add('hidden');
         startProcess(
             savedContext.title,
@@ -1684,7 +1713,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         driverReturnContext = null;
         driverActiveInput.disabled = false;
-        backFromDriverManagementBtn.textContent = '⬅ Geri';
+        backFromDriverManagementBtn.textContent = 'â¬… Geri';
         driverRegistrationReturnNote.classList.add('hidden');
         startProcess(
             savedContext.title,
@@ -1732,7 +1761,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         movementTypeReturnContext = null;
         movementTypeActiveInput.disabled = false;
-        backFromMovementTypeManagementBtn.textContent = '⬅ Geri';
+        backFromMovementTypeManagementBtn.textContent = 'â¬… Geri';
         const returnNote = document.getElementById('movement-type-registration-return-note');
         if (returnNote) {
             returnNote.classList.add('hidden');
@@ -1911,8 +1940,8 @@ document.addEventListener('DOMContentLoaded', () => {
         movementTypeActiveInput.checked = true;
         movementTypeActiveInput.disabled = Boolean(movementTypeReturnContext);
         backFromMovementTypeManagementBtn.textContent = movementTypeReturnContext
-            ? '← İşleme Dön'
-            : '⬅ Geri';
+            ? 'â† İşleme Dön'
+            : 'â¬… Geri';
         const returnNote = document.getElementById('movement-type-registration-return-note');
         if (returnNote) {
             returnNote.classList.toggle('hidden', !movementTypeReturnContext);
@@ -1924,7 +1953,7 @@ document.addEventListener('DOMContentLoaded', () => {
         return typesPromise;
     }
 
-    // ---- DASHBOARD / İŞLEM (KAMERA) AKIŞI ----
+    // ---- DASHBOARD / İÅLEM (KAMERA) AKIÅI ----
     pickupBtn.addEventListener('click', () => startProcess('Araç Alma', 'pickup'));
     dropoffBtn.addEventListener('click', () => startProcess('Teslim Etme', 'dropoff'));
     activeVehiclesBtn.addEventListener('click', showActiveVehicles);
@@ -1966,13 +1995,13 @@ document.addEventListener('DOMContentLoaded', () => {
             const triggerOcrBtn = document.getElementById('trigger-ocr-btn');
             if (triggerOcrBtn) {
                 triggerOcrBtn.disabled = true;
-                triggerOcrBtn.textContent = '⏳ Kamera hazırlanıyor...';
+                triggerOcrBtn.textContent = 'â³ Kamera hazırlanıyor...';
             }
             
             window.cameraController?.startCamera().then(started => {
                 if (dashboardSection.classList.contains('active')) {
                     if (triggerOcrBtn) {
-                        triggerOcrBtn.textContent = '📸 Şimdi Tara';
+                        triggerOcrBtn.textContent = 'ğŸ“¸ Åimdi Tara';
                         triggerOcrBtn.disabled = false;
                     }
                     if (started !== false) {
@@ -2287,7 +2316,7 @@ document.addEventListener('DOMContentLoaded', () => {
         
         isPlateListReady = false;
         if (triggerOcrBtn) {
-            triggerOcrBtn.textContent = '⏳ Kamera hazırlanıyor...';
+            triggerOcrBtn.textContent = 'â³ Kamera hazırlanıyor...';
             triggerOcrBtn.disabled = true;
         }
 
@@ -2329,7 +2358,7 @@ document.addEventListener('DOMContentLoaded', () => {
             cameraPromise,
         ]).then(results => {
             if (triggerOcrBtn && dashboardSection.classList.contains('active')) {
-                triggerOcrBtn.textContent = '🔍 Şimdi Tara';
+                triggerOcrBtn.textContent = 'ğŸ” Åimdi Tara';
                 triggerOcrBtn.disabled = false;
             }
             if (
@@ -2339,7 +2368,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 startAutoScan();
             } else {
                 setAutoScanStatus(
-                    'Kamera hazır değil; izin verip “Tekrar Dene” seçeneğini kullanın.',
+                    'Kamera hazır değil; izin verip â€œTekrar Deneâ€ seçeneğini kullanın.',
                     'error'
                 );
             }
@@ -2702,8 +2731,8 @@ document.addEventListener('DOMContentLoaded', () => {
         plateDetectionBox.setAttribute('aria-hidden', 'false');
         if (plateDetectionLabel) {
             plateDetectionLabel.textContent = isStable
-                ? 'Plaka bulundu • okunuyor'
-                : 'Plaka bulundu • sabit tutun';
+                ? 'Plaka bulundu â€¢ okunuyor'
+                : 'Plaka bulundu â€¢ sabit tutun';
         }
     }
 
@@ -3361,7 +3390,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         provinceCharacterRectangles[characterIndex]
                     );
                     triggerOcrBtn.textContent =
-                        `⏳ İl kodu karakteri okunuyor: ${characterIndex + 1}/2`;
+                        `â³ İl kodu karakteri okunuyor: ${characterIndex + 1}/2`;
                     const result = await recognizeWithTimeout(
                         worker,
                         characterCapture.canvas,
@@ -3417,7 +3446,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         segment.canvas.height
                     );
                     triggerOcrBtn.textContent =
-                        `⏳ İl kodu tahmin ediliyor: ${captureIndex + 1}/${prioritizedCaptures.length}`;
+                        `â³ İl kodu tahmin ediliyor: ${captureIndex + 1}/${prioritizedCaptures.length}`;
                     const result = await recognizeWithTimeout(
                         worker,
                         segment.canvas,
@@ -3483,7 +3512,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     async function requestLocalOcr(cropCaptures, sessionId) {
-        triggerOcrBtn.textContent = '⏳ Yerel OCR hazırlanıyor...';
+        triggerOcrBtn.textContent = 'â³ Yerel OCR hazırlanıyor...';
         const worker = await ensureOcrWorker();
         const registeredPlates = getRegisteredPlateOptions()
             .map(option => option.dataset.plate || option.value);
@@ -3506,7 +3535,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const capture = cropCaptures[cropIndex];
                 const { ctx, canvas, originalImageData } = capture;
                 triggerOcrBtn.textContent =
-                    `⏳ Yerel OCR: ${stage.name} ${cropIndex + 1}/${cropCaptures.length}`;
+                    `â³ Yerel OCR: ${stage.name} ${cropIndex + 1}/${cropCaptures.length}`;
                 ctx.putImageData(originalImageData, 0, 0);
                 stage.apply(ctx, canvas.width, canvas.height);
 
@@ -3535,7 +3564,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     stage: stage.name,
                 });
                 const normalizedRecognizedText = String(recognizedText).toUpperCase();
-                const recognizedCompact = /[ÇĞİÖŞÜ]/.test(normalizedRecognizedText)
+                const recognizedCompact = /[ÇÄİÖÅÜ]/.test(normalizedRecognizedText)
                     ? ''
                     : normalizedRecognizedText.replace(/[^A-Z0-9]/g, '');
                 const eligibleRegisteredPlates = registeredPlates.filter(plate => (
@@ -3700,18 +3729,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (bestMatch.estimated) {
             ocrConfidence.textContent =
-                '⚠️ Tahmini okuma • Onaylamadan önce kontrol edin.';
+                'âš ï¸ Tahmini okuma â€¢ Onaylamadan önce kontrol edin.';
             ocrConfidence.style.color = '#facc15';
         } else if (source === 'gemini') {
             ocrConfidence.textContent = 'Sunucu OCR sonucu';
             ocrConfidence.style.color = '#4ade80';
         } else {
-            const correctionNote = bestMatch.corrected ? ' • OCR karakterleri düzeltildi' : '';
+            const correctionNote = bestMatch.corrected ? ' â€¢ OCR karakterleri düzeltildi' : '';
             const consensusNote = bestMatch.consensus > 1
-                ? ` • ${bestMatch.consensus} sonuç eşleşti`
+                ? ` â€¢ ${bestMatch.consensus} sonuç eşleşti`
                 : '';
             ocrConfidence.textContent = (
-                `%${Math.round(bestMatch.confidence)} • Yerel OCR`
+                `%${Math.round(bestMatch.confidence)} â€¢ Yerel OCR`
                 + correctionNote
                 + consensusNote
             );
@@ -3723,12 +3752,12 @@ document.addEventListener('DOMContentLoaded', () => {
             : findRegisteredPlateOption(currentOcrPlate);
         if (currentMatchedOption) {
             currentOcrPlate = currentMatchedOption.value;
-            ocrDbStatus.textContent = '✅ Sistemde Bulundu';
+            ocrDbStatus.textContent = 'âœ… Sistemde Bulundu';
             ocrDbStatus.style.color = '#4ade80';
             ocrConfirmBtn.disabled = false;
             ocrConfirmBtn.style.opacity = '1';
         } else {
-            ocrDbStatus.textContent = '⚠️ Okundu • Araç Kayıtlı Değil';
+            ocrDbStatus.textContent = 'âš ï¸ Okundu â€¢ Araç Kayıtlı Değil';
             ocrDbStatus.style.color = '#facc15';
             ocrConfirmBtn.disabled = false;
             ocrConfirmBtn.style.opacity = '1';
@@ -3789,9 +3818,9 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         isOcrProcessing = true;
-        triggerOcrBtn.textContent = '⏳ Plaka okunuyor...';
+        triggerOcrBtn.textContent = 'â³ Plaka okunuyor...';
         triggerOcrBtn.disabled = true;
-        setAutoScanStatus('Plaka kırpıldı; metin okunuyor…', 'found');
+        setAutoScanStatus('Plaka kırpıldı; metin okunuyorâ€¦', 'found');
         const sessionId = ocrSessionId;
         let succeeded = false;
 
@@ -3898,7 +3927,7 @@ document.addEventListener('DOMContentLoaded', () => {
         } finally {
             isOcrProcessing = false;
             if (triggerOcrBtn && dashboardSection.classList.contains('active')) {
-                triggerOcrBtn.textContent = '🔍 Şimdi Tara';
+                triggerOcrBtn.textContent = 'ğŸ” Åimdi Tara';
                 triggerOcrBtn.disabled = false;
             }
         }
@@ -3964,7 +3993,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function startAutoScan() {
         stopAutoScan();
         autoScanCooldownUntil = 0;
-        setAutoScanStatus('Otomatik tarama açık • plakayı kameraya gösterin.', 'searching');
+        setAutoScanStatus('Otomatik tarama açık â€¢ plakayı kameraya gösterin.', 'searching');
         scheduleAutoScan(180);
     }
 
@@ -4005,7 +4034,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     autoScanStableFrames = Math.max(0, autoScanStableFrames - 1);
                 }
                 hideDetectionOverlay();
-                setAutoScanStatus('Plaka aranıyor…', 'searching');
+                setAutoScanStatus('Plaka aranıyorâ€¦', 'searching');
                 scheduleAutoScan();
                 return;
             }
@@ -4021,7 +4050,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 );
                 showDetectionOverlay(video, detection, blockedCandidate, false);
                 setAutoScanStatus(
-                    'Netliği düzeltin veya “Şimdi Tara” düğmesine dokunun.',
+                    'Netliği düzeltin veya â€œÅimdi Taraâ€ düğmesine dokunun.',
                     'found'
                 );
                 scheduleAutoScan();
@@ -4048,16 +4077,16 @@ document.addEventListener('DOMContentLoaded', () => {
             showDetectionOverlay(video, detection, candidate, stable);
             setAutoScanStatus(
                 stable
-                    ? 'Plaka hizalandı. Okutmak için "Şimdi Tara" düğmesine basın.'
+                    ? 'Plaka hizalandı. Okutmak için "Åimdi Tara" düğmesine basın.'
                     : 'Plaka bulundu; kısa süre sabit tutun.',
                 stable ? 'success' : 'found'
             );
 
-            // OTOMATİK OCR ÇAĞRISI İPTAL EDİLDİ - Yalnızca "Şimdi Tara" ile çalışacak
+            // OTOMATİK OCR ÇAÄRISI İPTAL EDİLDİ - Yalnızca "Åimdi Tara" ile çalışacak
         } catch (error) {
             console.warn('Otomatik plaka tespiti başarısız oldu:', error);
             hideDetectionOverlay();
-            setAutoScanStatus('Otomatik tespit yeniden deneniyor…', 'error');
+            setAutoScanStatus('Otomatik tespit yeniden deneniyorâ€¦', 'error');
         }
 
         scheduleAutoScan();
@@ -4147,13 +4176,13 @@ document.addEventListener('DOMContentLoaded', () => {
         ocrConfirmBtn.style.opacity = isValidPlate ? '1' : '0.5';
 
         if (!resolvedPlate) {
-            ocrDbStatus.textContent = '❌ Geçersiz Plaka';
+            ocrDbStatus.textContent = 'âŒ Geçersiz Plaka';
             ocrDbStatus.style.color = '#ef4444';
         } else if (resolvedPlate.registered) {
-            ocrDbStatus.textContent = '✅ Sistemde Bulundu';
+            ocrDbStatus.textContent = 'âœ… Sistemde Bulundu';
             ocrDbStatus.style.color = '#4ade80';
         } else {
-            ocrDbStatus.textContent = '⚠️ Geçerli • Araç Kayıtlı Değil';
+            ocrDbStatus.textContent = 'âš ï¸ Geçerli â€¢ Araç Kayıtlı Değil';
             ocrDbStatus.style.color = '#facc15';
         }
         updateOcrVehicleInfo(
@@ -4179,7 +4208,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         isOcrProcessing = false;
         if (triggerOcrBtn) {
-            triggerOcrBtn.innerHTML = '🔍 Şimdi Tara';
+            triggerOcrBtn.innerHTML = 'ğŸ” Åimdi Tara';
             triggerOcrBtn.disabled = false;
         }
         setAutoScanStatus('Otomatik tarama durduruldu.', 'info');
@@ -4202,10 +4231,10 @@ document.addEventListener('DOMContentLoaded', () => {
             closeCameraSafely();
         } else if (dashboardSection.classList.contains('active') && state.currentStep === 1) {
             triggerOcrBtn.disabled = true;
-            triggerOcrBtn.textContent = '⏳ Kamera hazırlanıyor...';
+            triggerOcrBtn.textContent = 'â³ Kamera hazırlanıyor...';
             window.cameraController?.startCamera().then(started => {
                 if (dashboardSection.classList.contains('active')) {
-                    triggerOcrBtn.textContent = '🔍 Şimdi Tara';
+                    triggerOcrBtn.textContent = 'ğŸ” Åimdi Tara';
                     triggerOcrBtn.disabled = false;
                     if (started !== false) {
                         startAutoScan();
@@ -4264,7 +4293,11 @@ document.addEventListener('DOMContentLoaded', () => {
             stepPlateContainer.classList.remove('hidden');
             stepMileageContainer.classList.add('hidden');
             
-            processBtnText.textContent = 'İleri: Kilometre';
+            if (state.currentAction === 'pickup') {
+                processBtnText.textContent = 'İleri →';
+            } else {
+                processBtnText.textContent = 'İleri: Kilometre';
+            }
             updateStepOneAvailability();
             
         } else if (state.currentStep === 2) {
@@ -4315,7 +4348,7 @@ document.addEventListener('DOMContentLoaded', () => {
         updateStepTwoAvailability
     );
 
-    // İŞLEM ONAYI VE BACKEND'E KAYIT (POST)
+    // İÅLEM ONAYI VE BACKEND'E KAYIT (POST)
     processBtn.addEventListener('click', async () => {
         if (state.currentStep === 1) {
             if (
@@ -4409,7 +4442,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
 
-    // ---- RAPORLAR MENÜSÜ AKIŞI ----
+    // ---- RAPORLAR MENÜSÜ AKIÅI ----
     
     // Rapor state
     let currentRecords = [];
@@ -4432,7 +4465,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     reportRecentBtn.addEventListener('click', () => {
         currentReportMode = 'recent';
-        reportTitle.textContent = "🕒 Son Hareket Raporu";
+        reportTitle.textContent = "ğŸ•’ Son Hareket Raporu";
         fetchAndShowReport('/api/reports/recent');
     });
 
@@ -4448,7 +4481,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 resetAdvancedReportFilters();
 
 
-                reportTitle.textContent = '🔎 Gelişmiş Hareket Raporu';
+                reportTitle.textContent = 'ğŸ” Gelişmiş Hareket Raporu';
 
 
                 fetchAdvancedReport();
@@ -4482,7 +4515,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if(selectedPlate) {
             currentReportMode = 'vehicle';
             reportTitle.textContent =
-                `🚗 Araç Raporu: ${getVehicleDisplayLabel(selectedPlate)}`;
+                `ğŸš— Araç Raporu: ${getVehicleDisplayLabel(selectedPlate)}`;
             fetchAndShowReport(`/api/reports/plate/${encodeURIComponent(selectedPlate)}`);
         }
     });
@@ -4505,7 +4538,7 @@ document.addEventListener('DOMContentLoaded', () => {
     applyAdvancedFiltersBtn.addEventListener('click', () => {
         if (currentReportMode !== 'vehicle') {
             currentReportMode = 'advanced';
-            reportTitle.textContent = '🔎 Gelişmiş Hareket Raporu';
+            reportTitle.textContent = 'ğŸ” Gelişmiş Hareket Raporu';
         }
         fetchAdvancedReport();
     });
@@ -4513,7 +4546,7 @@ document.addEventListener('DOMContentLoaded', () => {
         resetAdvancedReportFilters();
         if (currentReportMode !== 'vehicle') {
             currentReportMode = 'advanced';
-            reportTitle.textContent = '🔎 Gelişmiş Hareket Raporu';
+            reportTitle.textContent = 'ğŸ” Gelişmiş Hareket Raporu';
         }
         fetchAdvancedReport();
     });
@@ -4862,7 +4895,7 @@ document.addEventListener('DOMContentLoaded', () => {
         records.forEach(record => {
             const tr = document.createElement('tr');
             const actionTypeDisplay = record.status_key === 'active'
-                ? `${record.action_type || 'Araç Kullanımda'} • Aktif`
+                ? `${record.action_type || 'Araç Kullanımda'} â€¢ Aktif`
                 : record.action_type || '-';
             const values = [
                 { value: actionTypeDisplay },
@@ -5122,3 +5155,148 @@ document.addEventListener('DOMContentLoaded', () => {
         window.showToast('Başarıyla çıkış yapıldı.', 'success');
     }
 });
+// ---- PROFİL MODAL VE GÜNCELLEME İÅLEMLERİ ----
+document.addEventListener('DOMContentLoaded', () => {
+    const profileBtn = document.getElementById('header-profile-btn');
+    const profileModal = document.getElementById('profile-modal');
+    const closeProfileModalBtn = document.getElementById('close-profile-modal');
+    const cancelProfileBtn = document.getElementById('cancel-profile-btn');
+    
+    const profileFullname = document.getElementById('profile-fullname');
+    const profilePassword = document.getElementById('profile-password');
+    const profilePhotoInput = document.getElementById('profile-photo-input');
+    const profileModalImg = document.getElementById('profile-modal-img');
+    const profileModalPlaceholder = document.getElementById('profile-modal-placeholder');
+    const profileUpdateForm = document.getElementById('profile-update-form');
+    
+    let currentBase64Photo = '';
+
+    if (profileBtn) {
+        profileBtn.addEventListener('click', () => {
+            profileFullname.value = state.fullName || state.username || '';
+            profilePassword.value = '';
+            currentBase64Photo = state.profilePhoto || '';
+            
+            if (currentBase64Photo) {
+                profileModalImg.src = currentBase64Photo;
+                profileModalImg.style.display = 'block';
+                profileModalPlaceholder.style.display = 'none';
+            } else {
+                profileModalImg.src = '';
+                profileModalImg.style.display = 'none';
+                profileModalPlaceholder.style.display = 'flex';
+                profileModalPlaceholder.textContent = (state.fullName || state.username || 'P').charAt(0).toUpperCase();
+            }
+            
+            profileModal.classList.add('active');
+        });
+    }
+
+    const closeProfileModal = () => {
+        profileModal.classList.remove('active');
+    };
+
+    if (closeProfileModalBtn) closeProfileModalBtn.addEventListener('click', closeProfileModal);
+    if (cancelProfileBtn) cancelProfileBtn.addEventListener('click', closeProfileModal);
+    
+    // Fotoğraf Seçimi ve Canvas ile Küçültme
+    if (profilePhotoInput) {
+        profilePhotoInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            
+            if (!file.type.startsWith('image/')) {
+                window.showToast('Lütfen geçerli bir resim dosyası seçin.', 'error');
+                return;
+            }
+            
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                const img = new Image();
+                img.onload = () => {
+                    const canvas = document.createElement('canvas');
+                    const ctx = canvas.getContext('2d');
+                    
+                    // Boyutlandırma (maks 300x300)
+                    const MAX_SIZE = 300;
+                    let width = img.width;
+                    let height = img.height;
+                    
+                    if (width > height) {
+                        if (width > MAX_SIZE) {
+                            height *= MAX_SIZE / width;
+                            width = MAX_SIZE;
+                        }
+                    } else {
+                        if (height > MAX_SIZE) {
+                            width *= MAX_SIZE / height;
+                            height = MAX_SIZE;
+                        }
+                    }
+                    
+                    canvas.width = width;
+                    canvas.height = height;
+                    ctx.drawImage(img, 0, 0, width, height);
+                    
+                    const base64Data = canvas.toDataURL('image/jpeg', 0.8); // %80 kalite
+                    currentBase64Photo = base64Data;
+                    
+                    profileModalImg.src = currentBase64Photo;
+                    profileModalImg.style.display = 'block';
+                    profileModalPlaceholder.style.display = 'none';
+                };
+                img.src = event.target.result;
+            };
+            reader.readAsDataURL(file);
+        });
+    }
+
+    if (profileUpdateForm) {
+        profileUpdateForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const fullName = profileFullname.value.trim();
+            const password = profilePassword.value.trim();
+            
+            const saveBtn = document.getElementById('save-profile-btn');
+            const btnText = saveBtn.childNodes[0];
+            const spinner = saveBtn.querySelector('.spinner');
+            
+            saveBtn.disabled = true;
+            spinner.classList.remove('hidden');
+            
+            try {
+                const response = await fetch('/api/profile/update', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        full_name: fullName,
+                        password: password,
+                        profile_photo: currentBase64Photo
+                    })
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok && result.success) {
+                    window.showToast(result.message, 'success');
+                    // State güncelle
+                    state.fullName = result.full_name;
+                    state.profilePhoto = result.profile_photo;
+                    // UI güncelle
+                    if (typeof updateProfileUI === 'function') updateProfileUI();
+                    
+                    closeProfileModal();
+                } else {
+                    window.showToast(result.message || 'Profil güncellenirken hata oluştu.', 'error');
+                }
+            } catch (error) {
+                console.error('Profil güncelleme hatası:', error);
+                window.showToast('Sunucu ile iletişim kurulamadı.', 'error');
+            } finally {
+                saveBtn.disabled = false;
+                spinner.classList.add('hidden');
+            }
+        });
+    }
+});
+

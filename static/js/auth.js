@@ -39,14 +39,21 @@ document.addEventListener('DOMContentLoaded', () => {
         toggleAuthModeBtn.addEventListener('click', (e) => {
             e.preventDefault();
             isRegisterMode = !isRegisterMode;
+            const fullnameGroup = document.getElementById('fullname-group');
+            const fullnameInput = document.getElementById('fullname');
+            
             if (isRegisterMode) {
                 authTitle.textContent = 'Yeni Hesap Oluştur';
                 btnText.textContent = 'Kayıt Ol';
                 toggleAuthModeBtn.textContent = 'Zaten hesabınız var mı? Giriş yapın.';
+                fullnameGroup.classList.remove('hidden');
+                fullnameInput.required = true;
             } else {
                 authTitle.textContent = 'Güvenli Giriş';
                 btnText.textContent = 'Giriş Yap';
                 toggleAuthModeBtn.textContent = 'Hesabınız yok mu? Yeni kayıt oluşturun.';
+                fullnameGroup.classList.add('hidden');
+                fullnameInput.required = false;
             }
         });
     }
@@ -57,8 +64,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const username = document.getElementById('username').value.trim();
             const password = document.getElementById('password').value.trim();
+            const fullName = document.getElementById('fullname').value.trim();
 
-            if (!username || !password) {
+            if (!username || !password || (isRegisterMode && !fullName)) {
                 window.showToast('Lütfen tüm alanları doldurun.', 'error');
                 return;
             }
@@ -70,12 +78,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
             try {
                 const endpoint = isRegisterMode ? '/api/register' : '/api/login';
+                const payload = { username, password };
+                if (isRegisterMode) {
+                    payload.full_name = fullName;
+                }
+                
                 const response = await fetch(endpoint, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
                     },
-                    body: JSON.stringify({ username, password })
+                    body: JSON.stringify(payload)
                 });
 
                 const result = await response.json();
@@ -83,16 +96,25 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (response.ok && result.success) {
                     window.showToast(result.message, 'success');
                     
-                    // Giriş başarılı, ana ekrana (dashboard) geçişi tetikle
-                    // Bu fonksiyon main.js içinde tanımlı
-                    if (typeof window.switchToDashboard === 'function') {
-                        setTimeout(
-                            () => window.switchToDashboard(
-                                username,
-                                Boolean(result.is_admin)
-                            ),
-                            500
-                        );
+                    if (isRegisterMode) {
+                        // Kayıt sonrası otomatik login veya forma döndürme (burada isRegisterMode'u login'e çevirelim)
+                        setTimeout(() => {
+                            toggleAuthModeBtn.click();
+                            document.getElementById('password').value = '';
+                        }, 1000);
+                    } else {
+                        // Giriş başarılı, ana ekrana (dashboard) geçişi tetikle
+                        if (typeof window.switchToDashboard === 'function') {
+                            setTimeout(
+                                () => window.switchToDashboard(
+                                    username,
+                                    Boolean(result.is_admin),
+                                    result.full_name,
+                                    result.profile_photo
+                                ),
+                                500
+                            );
+                        }
                     }
                 } else {
                     window.showToast(result.message || 'Giriş başarısız.', 'error');

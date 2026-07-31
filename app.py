@@ -806,10 +806,15 @@ def login():
     if user and check_password_hash(user.password_hash, password):
         session.clear() # Fixation koruması
         session['user'] = user.username
+        
+        display_name = user.full_name if user.full_name else user.username
+        
         return jsonify({
             "success": True,
             "message": "Giriş başarılı.",
             "is_admin": user.is_admin,
+            "full_name": display_name,
+            "profile_photo": user.profile_photo
         }), 200
     else:
         return jsonify({"success": False, "message": "Hatalı Kullanıcı Adı veya Şifre!"}), 401
@@ -817,12 +822,15 @@ def login():
 @app.route('/api/register', methods=['POST'])
 def register():
     data = request.get_json()
-    if not data or 'username' not in data or 'password' not in data:
-        return jsonify({"success": False, "message": "Eksik bilgi girdiniz."}), 400
+    if not data or 'username' not in data or 'password' not in data or 'full_name' not in data:
+        return jsonify({"success": False, "message": "Eksik bilgi girdiniz (Ad Soyad zorunludur)."}), 400
         
     username = str(data.get('username') or "").strip()
     password = str(data.get('password') or "").strip()
+    full_name = str(data.get('full_name') or "").strip()
     
+    if len(full_name) < 3:
+        return jsonify({"success": False, "message": "Ad Soyad en az 3 karakter olmalıdır."}), 400
     if len(username) < 3:
         return jsonify({"success": False, "message": "Kullanıcı adı en az 3 karakter olmalıdır."}), 400
     if len(password) < 4:
@@ -835,6 +843,7 @@ def register():
     new_user = SystemUser(
         username=username,
         password_hash=generate_password_hash(password),
+        full_name=full_name,
         is_admin=False
     )
     db.session.add(new_user)
@@ -854,6 +863,49 @@ def register():
         "message": "Kayıt başarılı.",
         "is_admin": new_user.is_admin,
     }), 201
+
+@app.route('/api/profile/update', methods=['POST'])
+def profile_update():
+    if 'user' not in session:
+        return jsonify({"success": False, "message": "Oturum süresi dolmuş."}), 401
+    
+    data = request.get_json()
+    if not data:
+        return jsonify({"success": False, "message": "Veri gönderilmedi."}), 400
+        
+    username = session['user']
+    user = db.session.scalar(db.select(SystemUser).where(SystemUser.username == username))
+    
+    if not user:
+        return jsonify({"success": False, "message": "Kullanıcı bulunamadı."}), 404
+        
+    full_name = data.get('full_name', '').strip()
+    password = data.get('password', '').strip()
+    profile_photo = data.get('profile_photo', '') # Base64 string
+    
+    if full_name:
+        if len(full_name) < 3:
+            return jsonify({"success": False, "message": "Ad Soyad en az 3 karakter olmalıdır."}), 400
+        user.full_name = full_name
+        
+    if password:
+        if len(password) < 4:
+            return jsonify({"success": False, "message": "Yeni şifre en az 4 karakter olmalıdır."}), 400
+        user.password_hash = generate_password_hash(password)
+        
+    if profile_photo is not None and profile_photo != '':
+        user.profile_photo = profile_photo
+        
+    db.session.commit()
+    
+    display_name = user.full_name if user.full_name else user.username
+    
+    return jsonify({
+        "success": True,
+        "message": "Profil başarıyla güncellendi.",
+        "full_name": display_name,
+        "profile_photo": user.profile_photo
+    }), 200
 
 @app.route('/api/plates', methods=['GET'])
 def get_plates():

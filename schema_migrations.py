@@ -12,6 +12,10 @@ from sqlalchemy.exc import OperationalError
 
 
 _COLUMN_EXTENSIONS = {
+    "system_users": (
+        ("full_name", "VARCHAR(120)"),
+        ("profile_photo", "TEXT"),
+    ),
     "vehicles": (
         ("current_mileage", "INTEGER"),
     ),
