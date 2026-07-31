@@ -400,14 +400,42 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // Global: Giriş sonrası tetiklenir (auth.js)
-    window.switchToDashboard = function(username, isAdmin = false) {
+    window.switchToDashboard = function(username, isAdmin = false, fullName = null, profilePhoto = null) {
         state.username = username;
         state.isAdmin = Boolean(isAdmin);
+        state.fullName = fullName;
+        state.profilePhoto = profilePhoto;
+        
+        updateProfileUI();
         updateAdminVisibility();
         loadMovementTypes();
         loadDriversForProcess();
         showActionSelection();
     };
+
+    function updateProfileUI() {
+        const nameSpan = document.getElementById('header-profile-name');
+        const imgEl = document.getElementById('header-profile-img');
+        const placeholderEl = document.getElementById('header-profile-placeholder');
+        
+        if (!nameSpan || !imgEl || !placeholderEl) return;
+        
+        const displayName = state.fullName || state.username || 'Profil';
+        nameSpan.textContent = displayName;
+        
+        if (state.profilePhoto) {
+            imgEl.src = state.profilePhoto;
+            imgEl.style.display = 'block';
+            placeholderEl.style.display = 'none';
+        } else {
+            imgEl.src = '';
+            imgEl.style.display = 'none';
+            placeholderEl.style.display = 'flex';
+            if (displayName) {
+                placeholderEl.textContent = displayName.charAt(0).toUpperCase();
+            }
+        }
+    }
 
     // İşlem Seçimi Ekranını Göster
     async function updateDropoffButtonVisibility() {
@@ -5258,7 +5286,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     // UI güncelle
                     if (typeof updateProfileUI === 'function') updateProfileUI();
                     
-                    closeProfileModal();
+                    const profileModal = document.getElementById('profile-modal');
+                    if (profileModal) profileModal.classList.remove('active');
                 } else {
                     window.showToast(result.message || 'Profil güncellenirken hata oluştu.', 'error');
                 }
