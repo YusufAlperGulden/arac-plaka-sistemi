@@ -10,7 +10,7 @@ window.toggleTheme = function() {
     const icon = document.getElementById('theme-icon');
     const text = document.getElementById('theme-text');
     if (icon && text) {
-        icon.textContent = isLight ? '🌙' : '☀️';
+        icon.textContent = isLight ? '☀️' : '🌙';
         text.textContent = isLight ? 'Açık' : 'Koyu';
     }
 };
@@ -49,7 +49,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const themeIcon = document.getElementById('theme-icon');
     const themeText = document.getElementById('theme-text');
     if (document.body.classList.contains('light-mode')) {
-        if (themeIcon) themeIcon.textContent = '🌙';
+        if (themeIcon) themeIcon.textContent = '☀️';
         if (themeText) themeText.textContent = 'Açık';
     }
 
