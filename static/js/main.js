@@ -5236,9 +5236,15 @@ document.addEventListener('DOMContentLoaded', () => {
                     const base64Data = canvas.toDataURL('image/jpeg', 0.8); // %80 kalite
                     currentBase64Photo = base64Data;
                     
-                    profileModalImg.src = currentBase64Photo;
-                    profileModalImg.style.display = 'block';
-                    profileModalPlaceholder.style.display = 'none';
+                    const imgEl = document.getElementById('profile-modal-img');
+                    const placeholderEl = document.getElementById('profile-modal-placeholder');
+                    if (imgEl) {
+                        imgEl.src = currentBase64Photo;
+                        imgEl.style.display = 'block';
+                    }
+                    if (placeholderEl) {
+                        placeholderEl.style.display = 'none';
+                    }
                 };
                 img.src = event.target.result;
             };
@@ -5249,8 +5255,10 @@ document.addEventListener('DOMContentLoaded', () => {
     if (profileUpdateForm) {
         profileUpdateForm.addEventListener('submit', async (e) => {
             e.preventDefault();
-            const fullName = profileFullname.value.trim();
-            const password = profilePassword.value.trim();
+            const fullNameInput = document.getElementById('profile-fullname');
+            const passwordInput = document.getElementById('profile-password');
+            const fullName = fullNameInput ? fullNameInput.value.trim() : '';
+            const password = passwordInput ? passwordInput.value.trim() : '';
             
             const saveBtn = document.getElementById('save-profile-btn');
             const spinner = saveBtn.querySelector('.spinner');
