@@ -15,6 +15,11 @@ _COLUMN_EXTENSIONS = {
     "system_users": (
         ("full_name", "VARCHAR(120)"),
         ("profile_photo", "TEXT"),
+        ("employee_no", "VARCHAR(50)"),
+        ("department", "VARCHAR(120)"),
+        ("phone", "VARCHAR(40)"),
+        ("license_class", "VARCHAR(40)"),
+        ("license_expiry_date", "DATE"),
     ),
     "vehicles": (
         ("current_mileage", "INTEGER"),

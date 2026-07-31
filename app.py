@@ -822,7 +822,12 @@ def login():
             "message": "Giriş başarılı.",
             "is_admin": user.is_admin,
             "full_name": display_name,
-            "profile_photo": user.profile_photo
+            "profile_photo": user.profile_photo,
+            "employee_no": user.employee_no,
+            "department": user.department,
+            "phone": user.phone,
+            "license_class": user.license_class,
+            "license_expiry_date": user.license_expiry_date.isoformat() if user.license_expiry_date else None
         }), 200
     else:
         return jsonify({"success": False, "message": "Hatalı Kullanıcı Adı veya Şifre!"}), 401
@@ -903,6 +908,24 @@ def profile_update():
         
     if profile_photo is not None and profile_photo != '':
         user.profile_photo = profile_photo
+
+    if 'employee_no' in data:
+        user.employee_no = data['employee_no'].strip() or None
+    if 'department' in data:
+        user.department = data['department'].strip() or None
+    if 'phone' in data:
+        user.phone = data['phone'].strip() or None
+    if 'license_class' in data:
+        user.license_class = data['license_class'].strip() or None
+    if 'license_expiry_date' in data:
+        date_str = data['license_expiry_date'].strip()
+        if date_str:
+            try:
+                user.license_expiry_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+            except ValueError:
+                pass
+        else:
+            user.license_expiry_date = None
         
     db.session.commit()
     
@@ -912,7 +935,12 @@ def profile_update():
         "success": True,
         "message": "Profil başarıyla güncellendi.",
         "full_name": display_name,
-        "profile_photo": user.profile_photo
+        "profile_photo": user.profile_photo,
+        "employee_no": user.employee_no,
+        "department": user.department,
+        "phone": user.phone,
+        "license_class": user.license_class,
+        "license_expiry_date": user.license_expiry_date.isoformat() if user.license_expiry_date else None
     }), 200
 
 @app.route('/api/plates', methods=['GET'])

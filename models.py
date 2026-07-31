@@ -27,6 +27,11 @@ class SystemUser(db.Model):
     is_admin = db.Column(db.Boolean, default=False, nullable=False)
     full_name = db.Column(db.String(120), nullable=True)
     profile_photo = db.Column(db.Text, nullable=True)
+    employee_no = db.Column(db.String(50), nullable=True)
+    department = db.Column(db.String(120), nullable=True)
+    phone = db.Column(db.String(40), nullable=True)
+    license_class = db.Column(db.String(40), nullable=True)
+    license_expiry_date = db.Column(db.Date, nullable=True)
 
 
 class Driver(db.Model):

@@ -110,7 +110,8 @@ document.addEventListener('DOMContentLoaded', () => {
                                     username,
                                     Boolean(result.is_admin),
                                     result.full_name,
-                                    result.profile_photo
+                                    result.profile_photo,
+                                    result
                                 ),
                                 500
                             );

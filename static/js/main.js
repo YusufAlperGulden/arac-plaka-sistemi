@@ -405,11 +405,18 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // Global: Giriş sonrası tetiklenir (auth.js)
-    window.switchToDashboard = function(username, isAdmin = false, fullName = null, profilePhoto = null) {
+    window.switchToDashboard = function(username, isAdmin = false, fullName = null, profilePhoto = null, userData = null) {
         state.username = username;
         state.isAdmin = Boolean(isAdmin);
         state.fullName = fullName;
         state.profilePhoto = profilePhoto;
+        if (userData) {
+            state.employee_no = userData.employee_no || '';
+            state.department = userData.department || '';
+            state.phone = userData.phone || '';
+            state.license_class = userData.license_class || '';
+            state.license_expiry_date = userData.license_expiry_date || '';
+        }
         
         updateProfileUI();
         updateAdminVisibility();
@@ -5263,8 +5270,19 @@ document.addEventListener('DOMContentLoaded', () => {
             e.preventDefault();
             const fullNameInput = document.getElementById('profile-fullname');
             const passwordInput = document.getElementById('profile-password');
+            const employeeNoInput = document.getElementById('profile-employee-no');
+            const departmentInput = document.getElementById('profile-department');
+            const phoneInput = document.getElementById('profile-phone');
+            const licenseClassInput = document.getElementById('profile-license-class');
+            const licenseExpiryInput = document.getElementById('profile-license-expiry');
+            
             const fullName = fullNameInput ? fullNameInput.value.trim() : '';
             const password = passwordInput ? passwordInput.value.trim() : '';
+            const employeeNo = employeeNoInput ? employeeNoInput.value.trim() : '';
+            const department = departmentInput ? departmentInput.value.trim() : '';
+            const phone = phoneInput ? phoneInput.value.trim() : '';
+            const licenseClass = licenseClassInput ? licenseClassInput.value.trim() : '';
+            const licenseExpiry = licenseExpiryInput ? licenseExpiryInput.value.trim() : '';
             
             const saveBtn = document.getElementById('save-profile-btn');
             const spinner = saveBtn.querySelector('.spinner');
@@ -5279,7 +5297,12 @@ document.addEventListener('DOMContentLoaded', () => {
                     body: JSON.stringify({
                         full_name: fullName,
                         password: password,
-                        profile_photo: currentBase64Photo
+                        profile_photo: currentBase64Photo,
+                        employee_no: employeeNo,
+                        department: department,
+                        phone: phone,
+                        license_class: licenseClass,
+                        license_expiry_date: licenseExpiry
                     })
                 });
                 
@@ -5290,6 +5313,11 @@ document.addEventListener('DOMContentLoaded', () => {
                     // State güncelle
                     state.fullName = result.full_name;
                     state.profilePhoto = result.profile_photo;
+                    state.employee_no = result.employee_no;
+                    state.department = result.department;
+                    state.phone = result.phone;
+                    state.license_class = result.license_class;
+                    state.license_expiry_date = result.license_expiry_date;
                     // UI güncelle
                     if (typeof updateProfileUI === 'function') updateProfileUI();
                     
@@ -5325,6 +5353,17 @@ document.addEventListener('DOMContentLoaded', () => {
             
             if (profileFullname) profileFullname.value = state.fullName || state.username || '';
             if (profilePassword) profilePassword.value = '';
+            
+            const profileEmployeeNo = document.getElementById('profile-employee-no');
+            if (profileEmployeeNo) profileEmployeeNo.value = state.employee_no || '';
+            const profileDepartment = document.getElementById('profile-department');
+            if (profileDepartment) profileDepartment.value = state.department || '';
+            const profilePhone = document.getElementById('profile-phone');
+            if (profilePhone) profilePhone.value = state.phone || '';
+            const profileLicenseClass = document.getElementById('profile-license-class');
+            if (profileLicenseClass) profileLicenseClass.value = state.license_class || '';
+            const profileLicenseExpiry = document.getElementById('profile-license-expiry');
+            if (profileLicenseExpiry) profileLicenseExpiry.value = state.license_expiry_date || '';
             currentBase64Photo = state.profilePhoto || '';
             
             if (currentBase64Photo && profileModalImg) {
