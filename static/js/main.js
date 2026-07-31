@@ -4845,8 +4845,23 @@ document.addEventListener('DOMContentLoaded', () => {
 
     async function loadPlatesForDashboard() {
         const vehicles = await fetchPlatesAPI();
+        
+        let activePlates = new Set();
+        try {
+            const activeRes = await fetch('/api/records?status=active');
+            if (activeRes.ok) {
+                const activeTrips = await activeRes.json();
+                activePlates = new Set(activeTrips.map(t => t.vehicle_plate));
+            }
+        } catch (e) {
+            console.error('Error fetching active trips for dropdown filter:', e);
+        }
+
         plateSelect.innerHTML = '<option value="" disabled selected>Plaka Seçin...</option>';
         vehicles.forEach(vehicle => {
+            if (state.currentAction === 'dropoff' && !activePlates.has(vehicle.plate)) return;
+            if (state.currentAction === 'pickup' && activePlates.has(vehicle.plate)) return;
+
             const opt = document.createElement('option');
             opt.value = vehicle.plate;
             opt.dataset.plate = vehicle.plate;
