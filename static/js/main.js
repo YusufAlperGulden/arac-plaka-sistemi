@@ -228,6 +228,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const reportBrandFilter = document.getElementById('report-brand-filter');
     const reportModelFilter = document.getElementById('report-model-filter');
     const reportStatusFilter = document.getElementById('report-status-filter');
+    const reportPlateFilter = document.getElementById('report-plate-filter');
     const applyAdvancedFiltersBtn = document.getElementById(
         'apply-advanced-filters-btn'
     );
@@ -4439,6 +4440,7 @@ document.addEventListener('DOMContentLoaded', () => {
         'change',
         populateReportModelFilter
     );
+    reportPlateFilter.addEventListener('change', applyFiltersAndSort);
     applyAdvancedFiltersBtn.addEventListener('click', () => {
         if (currentReportMode !== 'vehicle') {
             currentReportMode = 'advanced';
@@ -4477,6 +4479,21 @@ document.addEventListener('DOMContentLoaded', () => {
             placeholderDisabled: false,
             selectedValue,
             labelKey: 'display_name',
+        });
+    }
+
+    function populateReportPlateFilter(selectedValue = '') {
+        const plates = new Set();
+        reportFilterVehicles.forEach(vehicle => {
+            if (vehicle.plate) plates.add(vehicle.plate);
+        });
+        const items = Array.from(plates).map(p => ({ id: p, name: p })).sort(
+            (left, right) => left.name.localeCompare(right.name, 'tr')
+        );
+        replaceSelectOptions(reportPlateFilter, items, {
+            placeholder: 'Tüm Plakalar',
+            placeholderDisabled: false,
+            selectedValue,
         });
     }
 
@@ -4533,6 +4550,7 @@ document.addEventListener('DOMContentLoaded', () => {
     async function loadReportFilterOptions() {
         const selectedDriver = reportDriverFilter.value;
         const selectedBrand = reportBrandFilter.value;
+        const selectedPlate = reportPlateFilter.value;
         try {
             const result = await apiRequest('/api/reports/filter-options');
             driversCache = Array.from(result.drivers || []);
@@ -4547,6 +4565,7 @@ document.addEventListener('DOMContentLoaded', () => {
             );
             populateReportBrandFilter(selectedBrand);
             populateReportModelFilter();
+            populateReportPlateFilter(selectedPlate);
         } catch (error) {
             window.showToast(
                 `Rapor filtreleri yüklenemedi: ${error.message}`,
@@ -4562,6 +4581,7 @@ document.addEventListener('DOMContentLoaded', () => {
         reportBrandFilter.value = '';
         reportModelFilter.value = '';
         reportStatusFilter.value = '';
+        reportPlateFilter.value = '';
         filterActionType.value = 'all';
         globalSearch.value = '';
         sortBy.value = 'date-desc';
@@ -4594,6 +4614,7 @@ document.addEventListener('DOMContentLoaded', () => {
             ['brand_id', reportBrandFilter.value],
             ['model_id', reportModelFilter.value],
             ['status', reportStatusValue],
+            ['plate', reportPlateFilter.value],
             ['sort', sortBy.value],
             [
                 'action_type',
@@ -4643,15 +4664,18 @@ document.addEventListener('DOMContentLoaded', () => {
         const brandFilterGrp = document.getElementById('report-brand-filter-group');
         const modelFilterGrp = document.getElementById('report-model-filter-group');
         const statusFilterGrp = document.getElementById('report-status-filter-group');
+        const plateFilterGrp = document.getElementById('report-plate-filter-group');
         
         if (currentReportMode === 'vehicle') {
             if (brandFilterGrp) brandFilterGrp.classList.add('hidden');
             if (modelFilterGrp) modelFilterGrp.classList.add('hidden');
             if (statusFilterGrp) statusFilterGrp.classList.add('hidden');
+            if (plateFilterGrp) plateFilterGrp.classList.add('hidden');
         } else {
             if (brandFilterGrp) brandFilterGrp.classList.remove('hidden');
             if (modelFilterGrp) modelFilterGrp.classList.remove('hidden');
             if (statusFilterGrp) statusFilterGrp.classList.remove('hidden');
+            if (plateFilterGrp) plateFilterGrp.classList.remove('hidden');
         }
         
         reportTableBody.innerHTML =
