@@ -5194,29 +5194,39 @@ window.openProfileModal = function(e) {
         e.preventDefault();
         e.stopPropagation();
     }
-    const profileModal = document.getElementById('profile-modal');
-    const profileFullname = document.getElementById('profile-fullname');
-    const profilePassword = document.getElementById('profile-password');
-    const profileModalImg = document.getElementById('profile-modal-img');
-    const profileModalPlaceholder = document.getElementById('profile-modal-placeholder');
-    
-    if (profileFullname) profileFullname.value = state.fullName || state.username || '';
-    if (profilePassword) profilePassword.value = '';
-    currentBase64Photo = state.profilePhoto || '';
-    
-    if (currentBase64Photo && profileModalImg) {
-        profileModalImg.src = currentBase64Photo;
-        profileModalImg.style.display = 'block';
-        if (profileModalPlaceholder) profileModalPlaceholder.style.display = 'none';
-    } else if (profileModalImg && profileModalPlaceholder) {
-        profileModalImg.src = '';
-        profileModalImg.style.display = 'none';
-        profileModalPlaceholder.style.display = 'flex';
-        const char = (state.fullName || state.username || 'P').charAt(0).toUpperCase();
-        profileModalPlaceholder.textContent = char;
+    try {
+        const profileModal = document.getElementById('profile-modal');
+        const profileFullname = document.getElementById('profile-fullname');
+        const profilePassword = document.getElementById('profile-password');
+        const profileModalImg = document.getElementById('profile-modal-img');
+        const profileModalPlaceholder = document.getElementById('profile-modal-placeholder');
+        
+        if (profileFullname) profileFullname.value = state.fullName || state.username || '';
+        if (profilePassword) profilePassword.value = '';
+        currentBase64Photo = state.profilePhoto || '';
+        
+        if (currentBase64Photo && profileModalImg) {
+            profileModalImg.src = currentBase64Photo;
+            profileModalImg.style.display = 'block';
+            if (profileModalPlaceholder) profileModalPlaceholder.style.display = 'none';
+        } else if (profileModalImg && profileModalPlaceholder) {
+            profileModalImg.src = '';
+            profileModalImg.style.display = 'none';
+            profileModalPlaceholder.style.display = 'flex';
+            const char = (state.fullName || state.username || 'P').charAt(0).toUpperCase();
+            profileModalPlaceholder.textContent = char;
+        }
+        
+        if (profileModal) {
+            profileModal.classList.add('active');
+            profileModal.style.display = 'flex';
+            profileModal.style.zIndex = '999999';
+        } else {
+            alert('Modal elementi bulunamadı! Lütfen sayfayı yenileyin.');
+        }
+    } catch(err) {
+        alert('Profil penceresi açılırken hata oluştu: ' + err.message);
     }
-    
-    if (profileModal) profileModal.classList.add('active');
 };
 
 window.closeProfileModal = function(e) {
