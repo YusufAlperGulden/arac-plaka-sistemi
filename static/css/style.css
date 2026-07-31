@@ -1360,3 +1360,18 @@ button {
 .modal.active {
     display: flex;
 }
+
+
+/* Global Top Bar Button Hover Effects */
+#global-top-bar button {
+    transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275), box-shadow 0.3s ease, background 0.3s ease !important;
+}
+#global-top-bar button:hover {
+    transform: scale(1.08) translateY(-2px) !important;
+    box-shadow: 0 4px 20px rgba(255, 255, 255, 0.3) !important;
+    background: rgba(255, 255, 255, 0.2) !important;
+}
+body.light-mode #global-top-bar button:hover {
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15) !important;
+    background: rgba(0, 0, 0, 0.05) !important;
+}
