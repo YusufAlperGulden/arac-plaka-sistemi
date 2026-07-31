@@ -5161,56 +5161,49 @@ let currentBase64Photo = '';
 
 
 
+window.openProfileModal = function(e) {
+    if (e) {
+        e.preventDefault();
+        e.stopPropagation();
+    }
+    const profileModal = document.getElementById('profile-modal');
+    const profileFullname = document.getElementById('profile-fullname');
+    const profilePassword = document.getElementById('profile-password');
+    const profileModalImg = document.getElementById('profile-modal-img');
+    const profileModalPlaceholder = document.getElementById('profile-modal-placeholder');
+    
+    if (profileFullname) profileFullname.value = state.fullName || state.username || '';
+    if (profilePassword) profilePassword.value = '';
+    currentBase64Photo = state.profilePhoto || '';
+    
+    if (currentBase64Photo && profileModalImg) {
+        profileModalImg.src = currentBase64Photo;
+        profileModalImg.style.display = 'block';
+        if (profileModalPlaceholder) profileModalPlaceholder.style.display = 'none';
+    } else if (profileModalImg && profileModalPlaceholder) {
+        profileModalImg.src = '';
+        profileModalImg.style.display = 'none';
+        profileModalPlaceholder.style.display = 'flex';
+        const char = (state.fullName || state.username || 'P').charAt(0).toUpperCase();
+        profileModalPlaceholder.textContent = char;
+    }
+    
+    if (profileModal) profileModal.classList.add('active');
+};
+
+window.closeProfileModal = function(e) {
+    if (e) {
+        e.preventDefault();
+        e.stopPropagation();
+    }
+    const profileModal = document.getElementById('profile-modal');
+    if (profileModal) profileModal.classList.remove('active');
+};
+
 document.addEventListener('DOMContentLoaded', () => {
     const profilePhotoInput = document.getElementById('profile-photo-input');
     const profileUpdateForm = document.getElementById('profile-update-form');
-    const profileBtn = document.getElementById('header-profile-btn');
-    const profileModal = document.getElementById('profile-modal');
-    const closeProfileBtn = document.getElementById('close-profile-modal');
-    const cancelProfileBtn = document.getElementById('cancel-profile-btn');
 
-    if (profileBtn && profileModal) {
-        profileBtn.addEventListener('click', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            
-            const profileFullname = document.getElementById('profile-fullname');
-            const profilePassword = document.getElementById('profile-password');
-            const profileModalImg = document.getElementById('profile-modal-img');
-            const profileModalPlaceholder = document.getElementById('profile-modal-placeholder');
-            
-            if (profileFullname) profileFullname.value = state.fullName || state.username || '';
-            if (profilePassword) profilePassword.value = '';
-            currentBase64Photo = state.profilePhoto || '';
-            
-            if (currentBase64Photo && profileModalImg) {
-                profileModalImg.src = currentBase64Photo;
-                profileModalImg.style.display = 'block';
-                if (profileModalPlaceholder) profileModalPlaceholder.style.display = 'none';
-            } else if (profileModalImg && profileModalPlaceholder) {
-                profileModalImg.src = '';
-                profileModalImg.style.display = 'none';
-                profileModalPlaceholder.style.display = 'flex';
-                const char = (state.fullName || state.username || 'P').charAt(0).toUpperCase();
-                profileModalPlaceholder.textContent = char;
-            }
-            
-            profileModal.classList.add('active');
-        });
-    }
-
-    const closeModalHandler = (e) => {
-        if (e) {
-            e.preventDefault();
-            e.stopPropagation();
-        }
-        if (profileModal) profileModal.classList.remove('active');
-    };
-
-    if (closeProfileBtn) closeProfileBtn.addEventListener('click', closeModalHandler);
-    if (cancelProfileBtn) cancelProfileBtn.addEventListener('click', closeModalHandler);
-
-    
     // Fotoğraf Seçimi ve Canvas ile Küçültme
     if (profilePhotoInput) {
         profilePhotoInput.addEventListener('change', (e) => {
