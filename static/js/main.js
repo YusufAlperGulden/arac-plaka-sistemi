@@ -414,8 +414,8 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             const response = await fetch('/api/records?status=active');
             if (!response.ok) return;
-            const records = await response.json();
-            if (records.length === 0) {
+            const data = await response.json();
+            if (data.records && data.records.length === 0) {
                 dropoffBtn.style.display = 'none';
             } else {
                 dropoffBtn.style.display = 'flex';
@@ -4850,8 +4850,10 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             const activeRes = await fetch('/api/records?status=active');
             if (activeRes.ok) {
-                const activeTrips = await activeRes.json();
-                activePlates = new Set(activeTrips.map(t => t.vehicle_plate));
+                const data = await activeRes.json();
+                if (data.records) {
+                    activePlates = new Set(data.records.map(t => t.vehicle_plate));
+                }
             }
         } catch (e) {
             console.error('Error fetching active trips for dropdown filter:', e);
