@@ -990,7 +990,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 ));
             }
             
-            card.append(header, details, actions);
+            const contentDiv = document.createElement('div');
+            contentDiv.className = 'management-item-content';
+            contentDiv.append(header, details);
+            
+            card.append(contentDiv, actions);
             activeTripList.appendChild(card);
         });
     }
