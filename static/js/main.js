@@ -7,9 +7,11 @@
 window.toggleTheme = function() {
     const isLight = document.body.classList.toggle('light-mode');
     localStorage.setItem('theme', isLight ? 'light' : 'dark');
-    const btn = document.getElementById('theme-toggle-btn');
-    if (btn) {
-        btn.textContent = isLight ? '🌙' : '☀️';
+    const icon = document.getElementById('theme-icon');
+    const text = document.getElementById('theme-text');
+    if (icon && text) {
+        icon.textContent = isLight ? '🌙' : '☀️';
+        text.textContent = isLight ? 'Koyu' : 'Açık';
     }
 };
 
@@ -44,9 +46,11 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // Set correct icon for theme button on load
-    const themeBtn = document.getElementById('theme-toggle-btn');
-    if (themeBtn && document.body.classList.contains('light-mode')) {
-        themeBtn.textContent = '🌙';
+    const themeIcon = document.getElementById('theme-icon');
+    const themeText = document.getElementById('theme-text');
+    if (document.body.classList.contains('light-mode')) {
+        if (themeIcon) themeIcon.textContent = '🌙';
+        if (themeText) themeText.textContent = 'Koyu';
     }
 
     // ---- EKRAN BÖLÜMLERİ (SECTIONS) ----
