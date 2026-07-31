@@ -1114,7 +1114,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         reminders.forEach(reminder => {
             const card = document.createElement('article');
-            card.className = 'management-item';
+            card.className = 'management-item reminder-item';
             const header = document.createElement('div');
             header.className = 'management-item-header';
             const text = document.createElement('div');

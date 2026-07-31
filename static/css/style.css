@@ -1244,3 +1244,15 @@ button {
     max-width: 500px;
     margin: 0 auto;
 }
+
+.reminder-item {
+    flex-direction: column;
+}
+.reminder-item .item-actions {
+    width: 100%;
+    flex-direction: row;
+    margin-top: 16px;
+}
+.reminder-item .item-actions button {
+    flex: 1;
+}
