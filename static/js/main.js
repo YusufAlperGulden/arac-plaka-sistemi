@@ -438,23 +438,48 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // İşlem Seçimi Ekranını Göster
-    async function updateDropoffButtonVisibility() {
+    async function updateActionButtonsVisibility() {
         const dropoffBtn = document.getElementById('action-dropoff');
+        const pickupBtn = document.getElementById('action-pickup');
         try {
-            const response = await fetch('/api/active-trips');
-            if (!response.ok) return;
-            const data = await response.json();
-            if (data.counts && data.counts.active === 0) {
-                dropoffBtn.disabled = true;
-                dropoffBtn.style.opacity = '0.4';
-                dropoffBtn.style.cursor = 'not-allowed';
-            } else {
-                dropoffBtn.disabled = false;
-                dropoffBtn.style.opacity = '1';
-                dropoffBtn.style.cursor = 'pointer';
+            const activeRes = await fetch('/api/active-trips');
+            if (!activeRes.ok) return;
+            const data = await activeRes.json();
+            
+            const activeCount = (data.counts && data.counts.active) ? data.counts.active : 0;
+            
+            if (dropoffBtn) {
+                if (activeCount === 0) {
+                    dropoffBtn.disabled = true;
+                    dropoffBtn.style.opacity = '0.4';
+                    dropoffBtn.style.cursor = 'not-allowed';
+                } else {
+                    dropoffBtn.disabled = false;
+                    dropoffBtn.style.opacity = '1';
+                    dropoffBtn.style.cursor = 'pointer';
+                }
+            }
+            
+            if (pickupBtn) {
+                const vehicles = await fetchPlatesAPI();
+                const totalVehicles = vehicles.length;
+                
+                const pickupDesc = pickupBtn.querySelector('p');
+                
+                if (totalVehicles <= activeCount) {
+                    pickupBtn.disabled = true;
+                    pickupBtn.style.opacity = '0.4';
+                    pickupBtn.style.cursor = 'not-allowed';
+                    if (pickupDesc) pickupDesc.textContent = 'Çıkışa uygun araç yoktur.';
+                } else {
+                    pickupBtn.disabled = false;
+                    pickupBtn.style.opacity = '1';
+                    pickupBtn.style.cursor = 'pointer';
+                    if (pickupDesc) pickupDesc.textContent = 'Sürücünün / Müşterinin aracı filodan alması';
+                }
             }
         } catch (error) {
-            console.error('Error updating dropoff visibility:', error);
+            console.error('Error updating action buttons visibility:', error);
         }
     }
 
@@ -471,7 +496,7 @@ document.addEventListener('DOMContentLoaded', () => {
         actionSection.classList.add('active');
         
         document.getElementById('welcome-message').textContent = `Hoş geldin ${state.username}, lütfen yapmak istediğiniz işlemi seçin.`;
-        updateDropoffButtonVisibility();
+        updateActionButtonsVisibility();
     }
 
     function updateAdminVisibility() {
