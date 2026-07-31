@@ -529,24 +529,38 @@ document.addEventListener('DOMContentLoaded', () => {
         return driversCache;
     }
 
-    function populateProcessDriverSelect(preferredId = null) {
+    function populateProcessDriverSelect(preferredId = null, activeDriverIds = null) {
         const previousValue = String(
             preferredId || driverSelect.value || ''
         );
-        const activeDrivers = driversCache.filter(driver => driver.active);
+        let activeDrivers = driversCache.filter(driver => driver.active);
+        
+        if (state.currentAction === 'dropoff' && activeDriverIds) {
+            activeDrivers = activeDrivers.filter(driver => activeDriverIds.has(String(driver.id)));
+        }
+
         driverSelect.textContent = '';
 
         if (activeDrivers.length === 0) {
             const fallback = document.createElement('option');
-            fallback.value = 'legacy-session-user';
-            fallback.textContent =
-                `${state.username || 'Oturum kullanıcısı'} (Oturum kullanıcısı)`;
-            fallback.dataset.driverName = state.username || '';
+            if (state.currentAction === 'dropoff') {
+                fallback.value = '';
+                fallback.disabled = true;
+                fallback.selected = true;
+                fallback.textContent = 'Aracı olan sürücü yoktur';
+                driverSelect.disabled = true;
+            } else {
+                fallback.value = 'legacy-session-user';
+                fallback.textContent = ${state.username || 'Oturum kullanıcısı'} (Oturum kullanıcısı);
+                fallback.dataset.driverName = state.username || '';
+                driverSelect.disabled = false;
+            }
             driverSelect.appendChild(fallback);
             driverSelect.value = fallback.value;
             return;
         }
 
+        driverSelect.disabled = false;
         const placeholder = document.createElement('option');
         placeholder.value = '';
         placeholder.disabled = true;
@@ -585,12 +599,24 @@ document.addEventListener('DOMContentLoaded', () => {
     async function loadDriversForProcess(preferredId = null) {
         try {
             await fetchDrivers();
-            populateProcessDriverSelect(preferredId);
+            
+            let activeDriverIds = null;
+            if (state.currentAction === 'dropoff') {
+                const res = await fetch('/api/records?status=active');
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data.records) {
+                        activeDriverIds = new Set(data.records.map(t => String(t.driver_id)));
+                    }
+                }
+            }
+            
+            populateProcessDriverSelect(preferredId, activeDriverIds);
         } catch (error) {
             driversCache = [];
             populateProcessDriverSelect();
             window.showToast(
-                `Sürücüler yüklenemedi: ${error.message}`,
+                Sürücüler yüklenemedi: ,
                 'error'
             );
         }
