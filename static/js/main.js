@@ -551,7 +551,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 driverSelect.disabled = true;
             } else {
                 fallback.value = 'legacy-session-user';
-                fallback.textContent = ${state.username || 'Oturum kullanıcısı'} (Oturum kullanıcısı);
+                fallback.textContent = `${state.username || 'Oturum kullanıcısı'} (Oturum kullanıcısı)`;
                 fallback.dataset.driverName = state.username || '';
                 driverSelect.disabled = false;
             }
@@ -616,7 +616,7 @@ document.addEventListener('DOMContentLoaded', () => {
             driversCache = [];
             populateProcessDriverSelect();
             window.showToast(
-                Sürücüler yüklenemedi: ,
+                `Sürücüler yüklenemedi: ${error.message}`,
                 'error'
             );
         }
