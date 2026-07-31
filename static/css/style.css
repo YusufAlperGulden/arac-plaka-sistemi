@@ -22,6 +22,14 @@
     --glass-bg: rgba(30, 41, 59, 0.7);
     --glass-border: rgba(255, 255, 255, 0.1);
     --glass-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
+    --input-bg: var(--input-bg);
+    --input-focus-bg: var(--table-header-bg);
+    --table-bg: var(--table-bg);
+    --table-header-bg: var(--table-header-bg);
+    --item-bg: var(--item-bg);
+    --item-bg-hover: rgba(15, 23, 42, 0.7);
+    --camera-container-bg: var(--camera-container-bg);
+
     
     /* Fontlar ve Geçişler */
     --font-family: 'Inter', sans-serif;
@@ -40,6 +48,14 @@ body.light-mode {
     --glass-bg: rgba(255, 255, 255, 0.85);
     --glass-border: rgba(0, 0, 0, 0.1);
     --glass-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.1);
+    --input-bg: rgba(255, 255, 255, 0.6);
+    --input-focus-bg: rgba(255, 255, 255, 1);
+    --table-bg: rgba(255, 255, 255, 0.6);
+    --table-header-bg: rgba(241, 245, 249, 0.9);
+    --item-bg: rgba(255, 255, 255, 0.7);
+    --item-bg-hover: rgba(255, 255, 255, 0.9);
+    --camera-container-bg: linear-gradient(135deg, #e2e8f0 0%, #cbd5e1 100%);
+
 }
 
 /* Genel Sıfırlama ve Temel Ayarlar */
@@ -57,7 +73,7 @@ body {
     display: flex;
     flex-direction: column;
     /* Varsayılan koyu arka plan */
-    background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%);
+    background: var(--camera-container-bg);
     overflow-x: hidden;
     transition: background 0.3s ease, color 0.3s ease;
 }
@@ -268,7 +284,7 @@ body.light-mode {
 .input-group textarea {
     width: 100%;
     padding: 12px 16px;
-    background: rgba(15, 23, 42, 0.6);
+    background: var(--input-bg);
     border: 1px solid var(--glass-border);
     border-radius: 8px;
     color: var(--text-primary);
@@ -395,7 +411,7 @@ button {
 .modern-table {
     width: 100%;
     border-collapse: collapse;
-    background: rgba(15, 23, 42, 0.4);
+    background: var(--table-bg);
     text-align: left;
 }
 .modern-table th, .modern-table td {
@@ -403,7 +419,7 @@ button {
     border-bottom: 1px solid var(--glass-border);
 }
 .modern-table th {
-    background: rgba(15, 23, 42, 0.8);
+    background: var(--table-header-bg);
     color: var(--text-secondary);
     font-weight: 600;
     font-size: 0.9rem;
@@ -601,7 +617,7 @@ button {
     z-index: 5;
     border: 3px solid #facc15;
     border-radius: 7px;
-    box-shadow: 0 0 0 2px rgba(15, 23, 42, 0.55), 0 0 18px rgba(250, 204, 21, 0.55);
+    box-shadow: 0 0 0 2px var(--item-bg), 0 0 18px rgba(250, 204, 21, 0.55);
     pointer-events: none;
     transition:
         left 140ms ease,
@@ -613,7 +629,7 @@ button {
 
 .plate-detection-box.stable {
     border-color: #22c55e;
-    box-shadow: 0 0 0 2px rgba(15, 23, 42, 0.55), 0 0 20px rgba(34, 197, 94, 0.65);
+    box-shadow: 0 0 0 2px var(--item-bg), 0 0 20px rgba(34, 197, 94, 0.65);
 }
 
 .plate-detection-box span {
@@ -622,7 +638,7 @@ button {
     bottom: calc(100% + 4px);
     padding: 3px 7px;
     border-radius: 5px;
-    background: rgba(15, 23, 42, 0.9);
+    background: var(--item-bg-hover);
     color: #fff;
     font-size: 0.72rem;
     font-weight: 700;
@@ -645,7 +661,7 @@ button {
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    background: rgba(15, 23, 42, 0.9);
+    background: var(--item-bg-hover);
     text-align: center;
     padding: 20px;
 }
@@ -722,7 +738,7 @@ button {
     padding: 16px;
     border: 1px solid var(--glass-border);
     border-radius: 12px;
-    background: rgba(15, 23, 42, 0.55);
+    background: var(--item-bg);
     text-align: center;
 }
 
@@ -760,7 +776,7 @@ button {
 .management-tab {
     min-height: 44px;
     border-radius: 8px;
-    background: rgba(15, 23, 42, 0.55);
+    background: var(--item-bg);
     color: var(--text-secondary);
     border: 1px solid var(--glass-border);
     font-weight: 600;
@@ -890,7 +906,7 @@ button {
     padding: 16px;
     border: 1px solid var(--glass-border);
     border-radius: 12px;
-    background: rgba(15, 23, 42, 0.55);
+    background: var(--item-bg);
     overflow-wrap: anywhere;
 }
 
@@ -1034,7 +1050,7 @@ button {
     padding: 16px;
     border: 1px solid var(--glass-border);
     border-radius: 12px;
-    background: rgba(15, 23, 42, 0.55);
+    background: var(--item-bg);
 }
 
 .report-card-header {
