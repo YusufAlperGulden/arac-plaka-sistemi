@@ -409,12 +409,29 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     // İşlem Seçimi Ekranını Göster
+    async function updateDropoffButtonVisibility() {
+        const dropoffBtn = document.getElementById('action-dropoff');
+        try {
+            const response = await fetch('/api/records?status=active');
+            if (!response.ok) return;
+            const records = await response.json();
+            if (records.length === 0) {
+                dropoffBtn.style.display = 'none';
+            } else {
+                dropoffBtn.style.display = 'flex';
+            }
+        } catch (error) {
+            console.error('Error updating dropoff visibility:', error);
+        }
+    }
+
     function showActionSelection() {
         hideAllSections();
         actionSection.classList.remove('hidden');
         actionSection.classList.add('active');
         
         document.getElementById('welcome-message').textContent = `Hoş geldin ${state.username}, lütfen yapmak istediğiniz işlemi seçin.`;
+        updateDropoffButtonVisibility();
     }
 
     function updateAdminVisibility() {
