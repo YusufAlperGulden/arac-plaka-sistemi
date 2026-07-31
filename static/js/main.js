@@ -416,9 +416,13 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!response.ok) return;
             const data = await response.json();
             if (data.records && data.records.length === 0) {
-                dropoffBtn.style.display = 'none';
+                dropoffBtn.disabled = true;
+                dropoffBtn.style.opacity = '0.4';
+                dropoffBtn.style.cursor = 'not-allowed';
             } else {
-                dropoffBtn.style.display = 'flex';
+                dropoffBtn.disabled = false;
+                dropoffBtn.style.opacity = '1';
+                dropoffBtn.style.cursor = 'pointer';
             }
         } catch (error) {
             console.error('Error updating dropoff visibility:', error);

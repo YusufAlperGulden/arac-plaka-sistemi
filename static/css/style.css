@@ -198,6 +198,12 @@ body {
     transition: all var(--transition-speed);
 }
 
+.action-big-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    filter: grayscale(100%);
+}
+
 .action-big-btn:hover:not(:disabled) {
     background: rgba(59, 130, 246, 0.15);
     border-color: var(--accent-color);
