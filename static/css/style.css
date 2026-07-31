@@ -28,6 +28,20 @@
     --transition-speed: 0.3s;
 }
 
+:root.light-mode {
+    --bg-primary: #f8fafc;
+    --bg-secondary: #ffffff;
+    --accent-color: #3b82f6;
+    --accent-hover: #2563eb;
+    --text-primary: #0f172a;
+    --text-secondary: #475569;
+    --error-color: #ef4444;
+    --success-color: #10b981;
+    --glass-bg: rgba(255, 255, 255, 0.85);
+    --glass-border: rgba(0, 0, 0, 0.1);
+    --glass-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.1);
+}
+
 /* Genel Sıfırlama ve Temel Ayarlar */
 * {
     margin: 0;
@@ -42,9 +56,14 @@ body {
     min-height: 100vh;
     display: flex;
     flex-direction: column;
-    /* Hafif bir degrade arka plan */
+    /* Varsayılan koyu arka plan */
     background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%);
     overflow-x: hidden;
+    transition: background 0.3s ease, color 0.3s ease;
+}
+
+body.light-mode {
+    background: var(--bg-primary);
 }
 
 /* --- YARDIMCI (UTILITY) SINIFLAR --- */

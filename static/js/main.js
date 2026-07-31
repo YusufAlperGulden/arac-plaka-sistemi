@@ -4,6 +4,20 @@
  * ve backend (API) iletişimini yönetir.
  */
 
+window.toggleTheme = function() {
+    const isLight = document.body.classList.toggle('light-mode');
+    localStorage.setItem('theme', isLight ? 'light' : 'dark');
+    const btn = document.getElementById('theme-toggle-btn');
+    if (btn) {
+        btn.textContent = isLight ? '🌙' : '☀️';
+    }
+};
+
+// Sayfa yüklenirken temayı uygula
+if (localStorage.getItem('theme') === 'light') {
+    document.body.classList.add('light-mode');
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     const {
         parseTurkishPlate,
@@ -27,6 +41,12 @@ document.addEventListener('DOMContentLoaded', () => {
         navigator.serviceWorker.register('/service-worker.js')
             .then(reg => console.log('Service Worker registered', reg))
             .catch(err => console.error('Service Worker registration failed', err));
+    }
+
+    // Set correct icon for theme button on load
+    const themeBtn = document.getElementById('theme-toggle-btn');
+    if (themeBtn && document.body.classList.contains('light-mode')) {
+        themeBtn.textContent = '🌙';
     }
 
     // ---- EKRAN BÖLÜMLERİ (SECTIONS) ----
