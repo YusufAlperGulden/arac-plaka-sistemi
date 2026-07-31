@@ -4857,7 +4857,9 @@ document.addEventListener('DOMContentLoaded', () => {
             console.error('Error fetching active trips for dropdown filter:', e);
         }
 
-        plateSelect.innerHTML = '<option value="" disabled selected>Plaka Seçin...</option>';
+        plateSelect.innerHTML = '';
+        let optionsAdded = 0;
+        
         vehicles.forEach(vehicle => {
             if (state.currentAction === 'dropoff' && !activePlates.has(vehicle.plate)) return;
             if (state.currentAction === 'pickup' && activePlates.has(vehicle.plate)) return;
@@ -4868,7 +4870,22 @@ document.addEventListener('DOMContentLoaded', () => {
             opt.dataset.vehicleLabel = vehicle.displayLabel;
             opt.textContent = vehicle.displayLabel;
             plateSelect.appendChild(opt);
+            optionsAdded++;
         });
+
+        if (optionsAdded === 0) {
+            plateSelect.innerHTML = `<option value="" disabled selected>${state.currentAction === 'dropoff' ? 'Teslim edilecek araç yoktur' : 'Çıkışa uygun araç yoktur'}</option>`;
+            plateSelect.disabled = true;
+        } else {
+            const defaultOpt = document.createElement('option');
+            defaultOpt.value = "";
+            defaultOpt.disabled = true;
+            defaultOpt.selected = true;
+            defaultOpt.textContent = 'Plaka Seçin...';
+            plateSelect.insertBefore(defaultOpt, plateSelect.firstChild);
+            plateSelect.disabled = false;
+        }
+
         if (state.plate) plateSelect.value = state.plate;
         updateSelectedVehicleInfo(plateSelect.value);
     }
