@@ -2459,8 +2459,8 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    let ocrWorker = null;
-    let ocrWorkerPromise = null;
+    let ocrScheduler = null;
+    let ocrSchedulerPromise = null;
     let isOcrProcessing = false;
     let isPlateListReady = false;
     let ocrSessionId = 0;
@@ -2495,40 +2495,40 @@ document.addEventListener('DOMContentLoaded', () => {
     let detectionCanvas = null;
     let detectionContext = null;
 
-    // Singleton Tesseract Worker Promise
-    async function ensureOcrWorker() {
-        if (ocrWorker) return ocrWorker;
-        if (ocrWorkerPromise) return ocrWorkerPromise;
+    async function ensureOcrScheduler() {
+        if (ocrScheduler) return ocrScheduler;
+        if (ocrSchedulerPromise) return ocrSchedulerPromise;
 
-        ocrWorkerPromise = (async () => {
+        ocrSchedulerPromise = (async () => {
             if (typeof Tesseract === 'undefined') {
                 throw new Error("Tesseract.js global nesnesi bulunamadı. Lütfen internet bağlantınızı kontrol edin.");
             }
 
-            let worker = null;
             try {
-                worker = await Tesseract.createWorker('eng', 1, {
-                    logger: message => {}
-                });
-
-                await worker.setParameters(OCR_GENERAL_PARAMETERS);
-
-                ocrWorker = worker;
-                return worker;
-            } catch (err) {
-                if (worker) {
-                    await worker.terminate().catch(() => {});
+                const scheduler = Tesseract.createScheduler();
+                // 3 Worker oluşturalım
+                const numWorkers = 3;
+                for (let i = 0; i < numWorkers; i++) {
+                    const worker = await Tesseract.createWorker('eng', 1, {
+                        logger: message => {}
+                    });
+                    await worker.setParameters(OCR_GENERAL_PARAMETERS);
+                    scheduler.addWorker(worker);
                 }
-                ocrWorker = null;
-                ocrWorkerPromise = null;
+
+                ocrScheduler = scheduler;
+                return scheduler;
+            } catch (err) {
+                ocrScheduler = null;
+                ocrSchedulerPromise = null;
                 throw err;
             }
         })();
 
         try {
-            return await ocrWorkerPromise;
+            return await ocrSchedulerPromise;
         } catch (error) {
-            ocrWorkerPromise = null;
+            ocrSchedulerPromise = null;
             throw error;
         }
     }
@@ -2541,20 +2541,11 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    async function resetOcrWorker() {
-        const worker = ocrWorker;
-        ocrWorker = null;
-        ocrWorkerPromise = null;
-        if (worker) {
-            await worker.terminate().catch(e => console.warn("OCR worker sonlandırılamadı:", e));
-        }
-    }
-
-    async function recognizeWithTimeout(worker, canvas, timeoutMs) {
+    async function recognizeWithTimeout(scheduler, canvas, timeoutMs) {
         let timerId;
         try {
             return await Promise.race([
-                worker.recognize(canvas),
+                scheduler.addJob('recognize', canvas),
                 new Promise((_, reject) => {
                     timerId = setTimeout(() => reject(new OcrTimeoutError()), timeoutMs);
                 })
@@ -3486,7 +3477,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     triggerOcrBtn.textContent =
                         `⏳ İl kodu karakteri okunuyor: ${characterIndex + 1}/2`;
                     const result = await recognizeWithTimeout(
-                        worker,
+                        scheduler,
                         characterCapture.canvas,
                         TESSERACT_STAGE_TIMEOUT_MS
                     );
@@ -3542,7 +3533,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     triggerOcrBtn.textContent =
                         `⏳ İl kodu tahmin ediliyor: ${captureIndex + 1}/${prioritizedCaptures.length}`;
                     const result = await recognizeWithTimeout(
-                        worker,
+                        scheduler,
                         segment.canvas,
                         TESSERACT_STAGE_TIMEOUT_MS
                     );
@@ -3607,7 +3598,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     async function requestLocalOcr(cropCaptures, sessionId) {
         triggerOcrBtn.textContent = '⏳ Yerel OCR hazırlanıyor...';
-        const worker = await ensureOcrWorker();
+        const scheduler = await ensureOcrScheduler();
         const registeredPlates = getRegisteredPlateOptions()
             .map(option => option.dataset.plate || option.value);
         const candidates = [];
@@ -3633,7 +3624,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 ctx.putImageData(originalImageData, 0, 0);
                 stage.apply(ctx, canvas.width, canvas.height);
 
-                const result = await recognizeWithTimeout(worker, canvas, TESSERACT_STAGE_TIMEOUT_MS);
+                const result = await recognizeWithTimeout(scheduler, canvas, TESSERACT_STAGE_TIMEOUT_MS);
                 if (sessionId !== ocrSessionId) {
                     return null;
                 }
