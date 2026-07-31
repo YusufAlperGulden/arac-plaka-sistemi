@@ -5191,12 +5191,6 @@ document.addEventListener('DOMContentLoaded', () => {
         
         window.showToast('Başarıyla çıkış yapıldı.', 'success');
     }
-});
-
-// ---- PROFİL MODAL VE GÜNCELLEME İÅLEMLERİ ----
-// Global Event Delegation approach
-
-document.addEventListener('DOMContentLoaded', () => {
     const profilePhotoInput = document.getElementById('profile-photo-input');
     const profileUpdateForm = document.getElementById('profile-update-form');
 
