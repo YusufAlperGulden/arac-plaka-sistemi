@@ -412,10 +412,10 @@ document.addEventListener('DOMContentLoaded', () => {
     async function updateDropoffButtonVisibility() {
         const dropoffBtn = document.getElementById('action-dropoff');
         try {
-            const response = await fetch('/api/records?status=active');
+            const response = await fetch('/api/active-trips');
             if (!response.ok) return;
             const data = await response.json();
-            if (data.records && data.records.length === 0) {
+            if (data.active_trips && data.active_trips.length === 0) {
                 dropoffBtn.disabled = true;
                 dropoffBtn.style.opacity = '0.4';
                 dropoffBtn.style.cursor = 'not-allowed';
@@ -606,11 +606,11 @@ document.addEventListener('DOMContentLoaded', () => {
             
             let activeDriverIds = null;
             if (state.currentAction === 'dropoff') {
-                const res = await fetch('/api/records?status=active');
+                const res = await fetch('/api/active-trips');
                 if (res.ok) {
                     const data = await res.json();
-                    if (data.records) {
-                        activeDriverIds = new Set(data.records.map(t => String(t.driver_id)));
+                    if (data.active_trips) {
+                        activeDriverIds = new Set(data.active_trips.map(t => String(t.driver_id)));
                     }
                 }
             }
@@ -4878,11 +4878,11 @@ document.addEventListener('DOMContentLoaded', () => {
         
         let activePlates = new Set();
         try {
-            const activeRes = await fetch('/api/records?status=active');
+            const activeRes = await fetch('/api/active-trips');
             if (activeRes.ok) {
                 const data = await activeRes.json();
-                if (data.records) {
-                    activePlates = new Set(data.records.map(t => t.vehicle_plate));
+                if (data.active_trips) {
+                    activePlates = new Set(data.active_trips.map(t => t.plate));
                 }
             }
         } catch (e) {
