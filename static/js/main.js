@@ -11,7 +11,7 @@ window.toggleTheme = function() {
     const text = document.getElementById('theme-text');
     if (icon && text) {
         icon.textContent = isLight ? '☀️' : '🌙';
-        text.textContent = isLight ? 'Açık' : 'Koyu';
+        text.textContent = isLight ? 'Açık Tema' : 'Koyu Tema';
     }
 };
 
@@ -50,7 +50,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const themeText = document.getElementById('theme-text');
     if (document.body.classList.contains('light-mode')) {
         if (themeIcon) themeIcon.textContent = '☀️';
-        if (themeText) themeText.textContent = 'Açık';
+        if (themeText) themeText.textContent = 'Açık Tema';
     }
 
     // ---- EKRAN BÖLÜMLERİ (SECTIONS) ----
