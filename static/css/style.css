@@ -863,7 +863,7 @@ button {
 
 .management-item {
     display: flex;
-    align-items: center;
+    align-items: stretch;
     justify-content: space-between;
     gap: 20px;
     padding: 16px;
@@ -917,6 +917,9 @@ button {
     margin-top: 0;
     flex-shrink: 0;
     width: 140px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
 }
 
 .item-actions button {

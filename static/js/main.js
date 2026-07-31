@@ -926,7 +926,9 @@ document.addEventListener('DOMContentLoaded', () => {
             driver.textContent = `Sürücü: ${item.driver}`;
             titleContainer.append(title, driver);
             const purposeBadge = createStatusBadge(true, item.action_type);
-            purposeBadge.classList.add('purpose');
+            if (!item.is_available) {
+                purposeBadge.classList.add('purpose');
+            }
             header.append(titleContainer, purposeBadge);
 
             const details = document.createElement('div');
