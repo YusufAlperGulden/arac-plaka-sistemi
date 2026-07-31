@@ -345,7 +345,12 @@
                     <input id="vehicle-id" type="hidden">
                     <div class="input-group">
                         <label for="vehicle-plate">Plaka</label>
-                        <input id="vehicle-plate" type="text" maxlength="16" placeholder="34 ABC 123" autocomplete="off" required>
+                        <div style="display: flex; gap: 8px;">
+                            <input id="vehicle-plate" type="text" maxlength="16" placeholder="34 ABC 123" autocomplete="off" required style="flex: 1;">
+                            <button type="button" id="vehicle-plate-ocr-btn" class="btn-secondary" style="width: 48px; padding: 0; display: flex; align-items: center; justify-content: center; font-size: 1.2rem;" title="Kamera ile Plaka Oku">
+                                📷
+                            </button>
+                        </div>
                     </div>
                     <div class="input-group">
                         <label for="vehicle-model-select">Marka ve Model</label>
@@ -834,7 +839,7 @@
     <!-- Tesseract.js for OCR -->
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
     <script src="/static/js/ocr-utils.js?v=24"></script>
-    <script src="/static/js/main.js?v=40"></script>
+    <script src="/static/js/main.js?v=41"></script>
 
     <script>
         // Sayfa değiştiğinde ana başlığı (Fatura İşleme Sistemi benzeri) gizle/göster

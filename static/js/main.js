@@ -431,6 +431,13 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function showActionSelection() {
+        if (state.ocrForVehicleRegistration) {
+            state.ocrForVehicleRegistration = false;
+            hideAllSections();
+            document.getElementById('fleet-management-section').classList.remove('hidden');
+            return;
+        }
+        
         hideAllSections();
         actionSection.classList.remove('hidden');
         actionSection.classList.add('active');
@@ -1945,6 +1952,37 @@ document.addEventListener('DOMContentLoaded', () => {
         () => showFleetManagement()
     );
     addNewPlateBtn.addEventListener('click', openNewPlateShortcut);
+    
+    const vehiclePlateOcrBtn = document.getElementById('vehicle-plate-ocr-btn');
+    if (vehiclePlateOcrBtn) {
+        vehiclePlateOcrBtn.addEventListener('click', () => {
+            state.ocrForVehicleRegistration = true;
+            hideAllSections();
+            const dashboardSection = document.getElementById('dashboard-section');
+            dashboardSection.classList.remove('hidden');
+            dashboardSection.classList.add('active');
+            
+            // Kamera hazırlığını başlat
+            const triggerOcrBtn = document.getElementById('trigger-ocr-btn');
+            if (triggerOcrBtn) {
+                triggerOcrBtn.disabled = true;
+                triggerOcrBtn.textContent = '⏳ Kamera hazırlanıyor...';
+            }
+            
+            window.cameraController?.startCamera().then(started => {
+                if (dashboardSection.classList.contains('active')) {
+                    if (triggerOcrBtn) {
+                        triggerOcrBtn.textContent = '📸 Şimdi Tara';
+                        triggerOcrBtn.disabled = false;
+                    }
+                    if (started !== false) {
+                        startAutoScan();
+                    }
+                }
+            });
+        });
+    }
+
     movementTypeManagementBtn.addEventListener(
         'click',
         () => showMovementTypeManagement()
@@ -4058,6 +4096,21 @@ document.addEventListener('DOMContentLoaded', () => {
                 option.dataset.vehicleLabel
                 || formatPlateForDisplay(resolvedPlate.normalized)
             );
+            
+            if (state.ocrForVehicleRegistration) {
+                const vehiclePlateInput = document.getElementById('vehicle-plate');
+                vehiclePlateInput.value = formatPlateForDisplay(resolvedPlate.normalized);
+                state.ocrForVehicleRegistration = false;
+                
+                hideAllSections();
+                const fleetManagementSection = document.getElementById('fleet-management-section');
+                fleetManagementSection.classList.remove('hidden');
+                
+                window.showToast(`Plaka okundu: ${formatPlateForDisplay(resolvedPlate.normalized)}`, 'success');
+                vehiclePlateInput.focus();
+                return;
+            }
+
             window.showToast(
                 `Plaka forma aktarıldı: ${transferredLabel}${registrationNote}`,
                 'success'
@@ -4188,8 +4241,9 @@ document.addEventListener('DOMContentLoaded', () => {
             serviceFormNoInput.required
             && !serviceFormNoInput.value.trim()
         );
+        const mileageMissing = state.currentAction === 'dropoff' && !mileageInput.value.trim();
         processBtn.disabled = (
-            !mileageInput.value.trim()
+            mileageMissing
             || requiredRequestMissing
             || requiredServiceFormMissing
         );
