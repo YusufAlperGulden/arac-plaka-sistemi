@@ -1,0 +1,7 @@
+com.teknopalas.aracplaka.app-pngs-0 C:\Users\stajyer\Downloads\Araç plakası\android-app\app\build\generated\res\pngs\release
+com.teknopalas.aracplaka.app-resValues-1 C:\Users\stajyer\Downloads\Araç plakası\android-app\app\build\generated\res\resValues\release
+com.teknopalas.aracplaka.app-packageReleaseResources-2 C:\Users\stajyer\Downloads\Araç plakası\android-app\app\build\intermediates\incremental\release\packageReleaseResources\merged.dir
+com.teknopalas.aracplaka.app-packageReleaseResources-3 C:\Users\stajyer\Downloads\Araç plakası\android-app\app\build\intermediates\incremental\release\packageReleaseResources\stripped.dir
+com.teknopalas.aracplaka.app-release-4 C:\Users\stajyer\Downloads\Araç plakası\android-app\app\build\intermediates\merged_res\release\mergeReleaseResources
+com.teknopalas.aracplaka.app-main-5 C:\Users\stajyer\Downloads\Araç plakası\android-app\app\src\main\res
+com.teknopalas.aracplaka.app-release-6 C:\Users\stajyer\Downloads\Araç plakası\android-app\app\src\release\res

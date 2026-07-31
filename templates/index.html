@@ -123,20 +123,29 @@
     </section>
 
 
-    <!-- Tüm Ekranlarda Görünecek Üst Bar (Login Hariç) -->
-    <div id="global-top-bar" style="position: fixed; top: 0; left: 0; width: 100%; height: 70px; display: none; justify-content: space-between; align-items: center; padding: 0 20px; z-index: 1000; pointer-events: none;">
-        <div style="pointer-events: auto;">
-            <button id="action-logout-btn" class="btn-secondary" style="padding: 10px 20px; font-size: 0.9rem; width: auto;">🚪 Çıkış Yap</button>
-        </div>
-        <div style="pointer-events: auto; display: flex; gap: 15px; align-items: center;">
-            <button id="theme-toggle-btn" class="glass-panel" onclick="toggleTheme()" style="padding: 5px 15px; font-size: 0.9rem; width: auto; border-radius: 20px; display: flex; align-items: center; justify-content: center; cursor: pointer; border: 1px solid rgba(255, 255, 255, 0.2); background: rgba(255, 255, 255, 0.1); color: var(--text-primary); transition: all 0.3s ease; gap: 8px;">
+    <!-- Kayan Menü (Floating Action Menu) -->
+    <div id="floating-menu-container" style="position: fixed; top: 20px; right: 20px; z-index: 1000; display: none; flex-direction: column; align-items: flex-end; gap: 10px;">
+        <!-- Menü Butonu -->
+        <button id="floating-menu-btn" class="glass-panel" onclick="document.getElementById('floating-menu-content').classList.toggle('hidden')" style="width: 45px; height: 45px; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; border: 1px solid rgba(255, 255, 255, 0.2); background: rgba(255, 255, 255, 0.1); color: var(--text-primary); transition: all 0.3s ease; box-shadow: 0 4px 15px rgba(0,0,0,0.2);">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
+        </button>
+        
+        <!-- Açılır Menü İçeriği -->
+        <div id="floating-menu-content" class="glass-card hidden" style="padding: 15px; display: flex; flex-direction: column; gap: 10px; min-width: 200px; transform-origin: top right; transition: all 0.3s ease; box-shadow: 0 8px 32px rgba(0,0,0,0.3);">
+            <button id="theme-toggle-btn" class="glass-panel" onclick="toggleTheme()" style="padding: 10px 15px; font-size: 0.9rem; width: 100%; border-radius: 12px; display: flex; align-items: center; justify-content: space-between; cursor: pointer; border: 1px solid rgba(255, 255, 255, 0.2); background: rgba(255, 255, 255, 0.05); color: var(--text-primary); transition: all 0.3s ease;">
                 <span id="theme-text">Koyu</span>
                 <span id="theme-icon">🌙</span>
             </button>
-            <button id="header-profile-btn" class="profile-header-btn" onclick="window.openProfileModal(event)" style="padding: 5px 15px; font-size: 0.9rem; width: auto; display: flex; align-items: center; gap: 10px; background: rgba(255, 255, 255, 0.1); border: 1px solid rgba(255, 255, 255, 0.2); border-radius: 20px; cursor: pointer; color: var(--text-primary); transition: all 0.3s ease;">
+            <button id="header-profile-btn" class="profile-header-btn" onclick="window.openProfileModal(event)" style="padding: 10px 15px; font-size: 0.9rem; width: 100%; display: flex; align-items: center; justify-content: space-between; background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.2); border-radius: 12px; cursor: pointer; color: var(--text-primary); transition: all 0.3s ease;">
                 <span id="header-profile-name" style="font-weight: 500;">Profil</span>
-                <img id="header-profile-img" src="" alt="Profil" style="width: 32px; height: 32px; border-radius: 50%; object-fit: cover; background: var(--surface-light); display: none;">
-                <div id="header-profile-placeholder" style="width: 32px; height: 32px; border-radius: 50%; background: var(--primary-color); display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 14px;">?</div>
+                <div style="display:flex; align-items:center;">
+                    <div id="header-profile-placeholder" style="width: 28px; height: 28px; border-radius: 50%; background: var(--primary-color); display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 12px; color: white;">?</div>
+                    <img id="header-profile-img" src="" alt="Profil" style="width: 28px; height: 28px; border-radius: 50%; object-fit: cover; background: var(--surface-light); display: none;">
+                </div>
+            </button>
+            <hr style="border-color: rgba(255,255,255,0.1); margin: 5px 0;">
+            <button id="action-logout-btn" class="btn-secondary" style="padding: 10px 15px; font-size: 0.9rem; width: 100%; border-radius: 12px; color: #ef4444; border-color: rgba(239, 68, 68, 0.3); background: transparent;">
+                🚪 Çıkış Yap
             </button>
         </div>
     </div>
@@ -766,6 +775,7 @@
                         <div id="ocr-roi-box" class="ocr-guide-box" aria-hidden="true"></div>
                         <div id="plate-detection-box" class="plate-detection-box hidden" aria-hidden="true">
                             <span id="plate-detection-label">Plaka aranıyor</span>
+                            <div id="ocr-loading-bar" class="ocr-loading-bar hidden"></div>
                         </div>
                         
                         <!-- Kamera açılamazsa gösterilecek uyarı -->
@@ -919,7 +929,7 @@
     <!-- Tesseract.js for OCR -->
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
     <script src="/static/js/ocr-utils.js?v=24"></script>
-    <script src="/static/js/main.js?v=64"></script>
+    <script src="/static/js/main.js?v=65"></script>
 
     <script>
         // Sayfa değiştiğinde ana başlığı (Fatura İşleme Sistemi benzeri) gizle/göster

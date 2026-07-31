@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="launcher_background">#3B82F6</color>
+    <string name="app_name">Araç Plaka</string>
+    <string name="blocked_link">Bu bağlantı güvenlik nedeniyle açılamadı.</string>
+    <string name="camera_permission_denied">Plaka okuyabilmek için kamera izni gereklidir.</string>
+    <string name="connection_error">Uygulamaya ulaşılamadı. İnternet bağlantınızı kontrol edip tekrar deneyin.</string>
+    <string name="connection_title">Bağlantı kurulamadı</string>
+    <string name="http_error">Sunucu hatası (HTTP %1$d).</string>
+    <string name="no_browser">Bağlantıyı açabilecek bir tarayıcı bulunamadı.</string>
+    <string name="retry">Tekrar Dene</string>
+    <string name="secure_connection_error">Güvenli bağlantı doğrulanamadı.</string>
+    <style name="Theme.AracPlaka" parent="@android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:fontFamily">sans</item>
+        <item name="android:windowActionModeOverlay">true</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:statusBarColor">#0F172A</item>
+        <item name="android:navigationBarColor">#0F172A</item>
+        <item name="android:windowBackground">#0F172A</item>
+        <item name="android:colorAccent">#3B82F6</item>
+    </style>
+</resources>

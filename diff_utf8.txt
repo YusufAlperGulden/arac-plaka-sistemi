@@ -1,0 +1,553 @@
+diff --git a/static/js/main.js b/static/js/main.js
+index 4dc02ce..ee1540a 100644
+--- a/static/js/main.js
++++ b/static/js/main.js
+@@ -124,49 +124,80 @@ document.addEventListener('DOMContentLoaded', () => {
+         }
+         
+         // Kamera açıldığında (veya işlem başladığında) lazy-load OCR
+-        initOcrWorker();
++        // initOcrWorker(); // Kaldırıldı, wrapper üzerinden çağrılıyor
+     }
+     
+     let ocrWorker = null;
++    let ocrWorkerPromise = null;
+     let isOcrProcessing = false;
+-    const OCR_MIN_CONFIDENCE = 50; // Konfigüre edilebilir güven skoru sınırı
++    let ocrSessionId = 0;
++    const OCR_MIN_CONFIDENCE = 50;
++    const OCR_TOTAL_TIMEOUT_MS = 15000;
++
++    // Singleton Tesseract Worker Promise
++    async function ensureOcrWorker() {
++        if (ocrWorker) return ocrWorker;
++        if (ocrWorkerPromise) return ocrWorkerPromise;
+ 
+-    // Tesseract Worker'ı asenkron olarak başlat
+-    async function initOcrWorker() {
+         const triggerOcrBtn = document.getElementById('trigger-ocr-btn');
+-        if (triggerOcrBtn && !ocrWorker) {
++        if (triggerOcrBtn) {
+             triggerOcrBtn.innerHTML = '⏳ OCR Motoru Yükleniyor...';
+             triggerOcrBtn.disabled = true;
+         }
+ 
+-        if (!ocrWorker && typeof Tesseract !== 'undefined') {
++        ocrWorkerPromise = (async () => {
++            if (typeof Tesseract === 'undefined') {
++                throw new Error("Tesseract.js global nesnesi bulunamadı. Lütfen internet bağlantınızı kontrol edin.");
++            }
++
++            let worker = null;
+             try {
+-                ocrWorker = await Tesseract.createWorker('eng', 1, {
+-                    logger: m => {}
++                worker = await Tesseract.createWorker('eng', 1, {
++                    logger: message => {}
+                 });
+-                await ocrWorker.setParameters({
++
++                await worker.setParameters({
+                     tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 ',
++                    tessedit_pageseg_mode: Tesseract.PSM.SINGLE_LINE,
+                     preserve_interword_spaces: '1'
+                 });
+-                console.log("Tesseract Worker hazır.");
+-                
+-                if (triggerOcrBtn) {
+-                    triggerOcrBtn.innerHTML = '📷 Plakayı Oku';
+-                    triggerOcrBtn.disabled = false;
+-                }
+-            } catch (error) {
+-                console.error("Tesseract yüklenemedi:", error);
+-                if (triggerOcrBtn) {
+-                    triggerOcrBtn.innerHTML = '⚠️ OCR Yüklenemedi';
+-                    triggerOcrBtn.disabled = true;
++
++                ocrWorker = worker;
++                return worker;
++            } catch (err) {
++                if (worker) {
++                    await worker.terminate().catch(() => {});
+                 }
++                ocrWorker = null;
++                ocrWorkerPromise = null;
++                throw err;
++            }
++        })();
++
++        try {
++            const worker = await ocrWorkerPromise;
++            if (triggerOcrBtn) {
++                triggerOcrBtn.innerHTML = '📷 Plakayı Oku';
++                triggerOcrBtn.disabled = false;
+             }
++            return worker;
++        } catch (error) {
++            ocrWorkerPromise = null;
++            if (triggerOcrBtn) {
++                triggerOcrBtn.innerHTML = '⚠️ OCR Yüklenemedi';
++                triggerOcrBtn.disabled = true;
++            }
++            throw error;
+         }
+     }
+ 
+-    const triggerOcrBtn = document.getElementById('trigger-ocr-btn');
+-    
++    // Kamera veya modal kapandığında OCR sürecini sonlandır
++    function invalidateOcrSession() {
++        ocrSessionId += 1;
++    }
++
+     // Modal DOM Elements
++    const triggerOcrBtn = document.getElementById('trigger-ocr-btn');
+     const ocrConfirmModal = document.getElementById('ocr-confirm-modal');
+     const ocrResultText = document.getElementById('ocr-result-text');
+     const ocrConfidence = document.getElementById('ocr-confidence');
+@@ -177,59 +208,126 @@ document.addEventListener('DOMContentLoaded', () => {
+     const ocrManualEditContainer = document.getElementById('ocr-manual-edit-container');
+     const ocrManualInput = document.getElementById('ocr-manual-input');
+     const ocrDebugCanvas = document.getElementById('ocr-debug-canvas');
++    const ocrOriginalCanvas = document.getElementById('ocr-original-crop-canvas'); // Yeni eklendi
+ 
+     let currentOcrPlate = null;
+ 
+-    function normalizePlate(text) {
+-        let clean = text.replace(/[^A-Z0-9]/gi, '').toUpperCase();
+-        // Basit bağlamsal düzeltmeler (İl kodu için)
++    /**
++     * Plaka ayrıştırma ve İl kodu (01-81) doğrulaması.
++     */
++    function parseTurkishPlate(value) {
++        if (!value) return null;
++        let clean = value.replace(/[^A-Z0-9]/gi, '').toUpperCase();
++        
+         if (clean.length >= 2) {
+             let firstTwo = clean.substring(0, 2).replace(/O/g, '0').replace(/I/g, '1').replace(/S/g, '5').replace(/B/g, '8');
+             clean = firstTwo + clean.substring(2);
+         }
+-        return clean;
++
++        const match = /^(\d{2})([A-Z]{1,3})(\d{2,4})$/.exec(clean);
++        if (!match) return null;
++
++        const provinceCode = Number(match[1]);
++        if (!Number.isInteger(provinceCode) || provinceCode < 1 || provinceCode > 81) {
++            return null; // İl kodu hatalı (Örn: 00 veya 82)
++        }
++
++        return {
++            normalized: clean,
++            provinceCode,
++            letters: match[2],
++            digits: match[3]
++        };
+     }
+ 
++    /**
++     * Normalize edilmiş OCR değeri ile Select listesindeki normalize edilmiş değerleri kıyaslar.
++     * Eşleşme bulursa Select option'ın "orijinal" değerini döndürür.
++     */
+     function checkPlateInDb(plateText) {
++        const parsed = parseTurkishPlate(plateText);
++        if (!parsed) return null;
++        const target = parsed.normalized;
++
+         for (let i = 0; i < plateSelect.options.length; i++) {
+-            if (plateSelect.options[i].value === plateText) {
+-                return true;
++            // HTML içindeki <option> yapısına göre gerçek degeri (option.value veya textContent) yakala.
++            // Bizim sistemde optVal genelde plakanın kendisidir ("34 ABC 123" gibi)
++            const optVal = plateSelect.options[i].value;
++            const parsedOpt = parseTurkishPlate(optVal) || parseTurkishPlate(plateSelect.options[i].textContent);
++            
++            if (parsedOpt && parsedOpt.normalized === target) {
++                return optVal; // Orijinal ID veya değeri döndür
+             }
+         }
+-        return false;
++        return null;
+     }
+ 
+     /**
+-     * mapOverlayToVideoSource
+      * Saf (pure) fonksiyon: Ekranda görünen ROI kutusunu, orijinal video piksel koordinatlarına dönüştürür.
+      */
+-    function mapOverlayToVideoSource({ videoWidth, videoHeight, displayRect, overlayRect, objectFit }) {
++    function mapOverlayToVideoSource({ videoWidth, videoHeight, displayRect, overlayRect, objectFit, objectPosition }) {
++        if (videoWidth <= 0 || videoHeight <= 0 || displayRect.width <= 0 || displayRect.height <= 0) {
++            throw new Error("Video veya görüntü alanı henüz hazır değil.");
++        }
++
+         let scaleX = videoWidth / displayRect.width;
+         let scaleY = videoHeight / displayRect.height;
+         let scale;
+         
+         if (objectFit === 'cover') {
+-            scale = Math.min(scaleX, scaleY); // Cover için minimum scale (görüntü taşıyor)
++            scale = Math.min(scaleX, scaleY);
++        } else if (objectFit === 'contain') {
++            scale = Math.max(scaleX, scaleY);
+         } else {
+-            scale = Math.max(scaleX, scaleY); // Contain için maximum scale (görüntü tam sığıyor)
++            scale = scaleX;
+         }
+ 
+         const displayedWidth = videoWidth / scale;
+         const displayedHeight = videoHeight / scale;
+         
+-        // object-position: center (default) varsayılmıştır.
+-        const offsetX = (displayRect.width - displayedWidth) / 2;
+-        const offsetY = (displayRect.height - displayedHeight) / 2;
++        let posX = 0.5, posY = 0.5;
++        if (objectPosition) {
++            const parts = objectPosition.split(' ');
++            if (parts.length >= 2) {
++                const parsedX = Number.parseFloat(parts[0]);
++                const parsedY = Number.parseFloat(parts[1]);
++                if (Number.isFinite(parsedX)) posX = parsedX / 100;
++                if (Number.isFinite(parsedY)) posY = parsedY / 100;
++            }
++        }
++
++        const offsetX = (displayRect.width - displayedWidth) * posX;
++        const offsetY = (displayRect.height - displayedHeight) * posY;
+ 
+         const roiX = overlayRect.left - displayRect.left;
+         const roiY = overlayRect.top - displayRect.top;
+ 
+-        const sourceX = (roiX - offsetX) * scale;
+-        const sourceY = (roiY - offsetY) * scale;
+-        const sourceW = overlayRect.width * scale;
+-        const sourceH = overlayRect.height * scale;
++        const rawSourceX = (roiX - offsetX) * scale;
++        const rawSourceY = (roiY - offsetY) * scale;
++        const rawSourceW = overlayRect.width * scale;
++        const rawSourceH = overlayRect.height * scale;
++
++        const originalArea = rawSourceW * rawSourceH;
++
++        // Clamping (Sınır kısıtlaması)
++        const x = Math.max(0, rawSourceX);
++        const y = Math.max(0, rawSourceY);
++        const right = Math.min(videoWidth, rawSourceX + rawSourceW);
++        const bottom = Math.min(videoHeight, rawSourceY + rawSourceH);
++
++        const w = right - x;
++        const h = bottom - y;
++
++        if (w <= 0 || h <= 0) {
++            throw new Error("OCR ROI video karesinin tamamen dışında kaldı.");
++        }
++
++        const clampedArea = w * h;
++        if (clampedArea < originalArea * 0.5) {
++            throw new Error("OCR ROI video karesinin büyük oranda dışında kaldı.");
++        }
+ 
+-        return { x: sourceX, y: sourceY, w: sourceW, h: sourceH };
++        return { x, y, w, h };
+     }
+     
+     // İşleme fonksiyonları
+@@ -259,7 +357,7 @@ document.addEventListener('DOMContentLoaded', () => {
+         const data = imageData.data;
+         for (let i = 0; i < data.length; i += 4) {
+             const gray = 0.299 * data[i] + 0.587 * data[i+1] + 0.114 * data[i+2];
+-            const val = gray > thresholdValue ? 0 : 255; // Ters
++            const val = gray > thresholdValue ? 0 : 255;
+             data[i] = data[i+1] = data[i+2] = val;
+         }
+         ctx.putImageData(imageData, 0, 0);
+@@ -267,8 +365,8 @@ document.addEventListener('DOMContentLoaded', () => {
+ 
+     if (triggerOcrBtn) {
+         triggerOcrBtn.addEventListener('click', async () => {
+-            if (isOcrProcessing || !ocrWorker || !window.cameraController || !window.cameraController.videoElement || window.cameraController.videoElement.readyState !== 4) {
+-                window.showToast("Kamera veya OCR motoru henüz hazır değil.", "error");
++            if (isOcrProcessing || !window.cameraController || !window.cameraController.videoElement || window.cameraController.videoElement.readyState !== 4) {
++                window.showToast("Kamera henüz hazır değil.", "error");
+                 return;
+             }
+             
+@@ -277,26 +375,42 @@ document.addEventListener('DOMContentLoaded', () => {
+             triggerOcrBtn.innerHTML = '⏳ İşleniyor...';
+             triggerOcrBtn.disabled = true;
+ 
++            const sessionId = ocrSessionId;
++
+             try {
++                // Ensure worker is fully initialized
++                await ensureOcrWorker();
++
++                if (sessionId !== ocrSessionId) return; // İptal edildi
++
+                 const video = window.cameraController.videoElement;
+                 const roiBox = document.getElementById('ocr-roi-box');
++                const computedStyle = getComputedStyle(video);
+                 
+-                // 1. Koordinat Eşleme ve Kırpma (object-fit: cover uyumlu)
+                 const sourceCrop = mapOverlayToVideoSource({
+                     videoWidth: video.videoWidth,
+                     videoHeight: video.videoHeight,
+                     displayRect: video.getBoundingClientRect(),
+                     overlayRect: roiBox.getBoundingClientRect(),
+-                    objectFit: 'cover' // CSS'teki değere göre
++                    objectFit: computedStyle.objectFit,
++                    objectPosition: computedStyle.objectPosition
+                 });
+                 
+                 const canvas = document.createElement('canvas');
+-                // 2x Scale for better OCR
+                 canvas.width = sourceCrop.w * 2;
+                 canvas.height = sourceCrop.h * 2;
+                 const ctx = canvas.getContext('2d');
+                 
+-                // Staged Preprocessing Pipeline (Kademeli Fallback)
++                // Orijinal görüntüyü bir kez yakala
++                ctx.drawImage(video, sourceCrop.x, sourceCrop.y, sourceCrop.w, sourceCrop.h, 0, 0, canvas.width, canvas.height);
++                const originalImageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
++
++                if (ocrOriginalCanvas) {
++                    ocrOriginalCanvas.width = canvas.width;
++                    ocrOriginalCanvas.height = canvas.height;
++                    ocrOriginalCanvas.getContext('2d').putImageData(originalImageData, 0, 0);
++                }
++
+                 const stages = [
+                     { name: 'Grayscale', apply: (c, w, h) => processGrayscale(c, w, h) },
+                     { name: 'Threshold', apply: (c, w, h) => processThreshold(c, w, h, 128) },
+@@ -305,49 +419,53 @@ document.addEventListener('DOMContentLoaded', () => {
+                 
+                 let bestMatch = null;
+                 
+-                for (const stage of stages) {
+-                    console.log(`OCR Denemesi: ${stage.name}`);
+-                    // Orijinal görüntüyü çiz
+-                    ctx.drawImage(video, sourceCrop.x, sourceCrop.y, sourceCrop.w, sourceCrop.h, 0, 0, canvas.width, canvas.height);
+-                    
+-                    // İşlemi uygula
+-                    stage.apply(ctx, canvas.width, canvas.height);
+-                    
+-                    // OCR
+-                    const result = await ocrWorker.recognize(canvas, {
+-                        tessedit_pageseg_mode: Tesseract.PSM.SINGLE_LINE
+-                    });
+-                    
+-                    const text = result.data.text;
+-                    const confidence = result.data.confidence;
+-                    const normalizedText = normalizePlate(text);
+-                    const plateRegex = /^([0-9]{2})([A-Z]{1,3})([0-9]{2,4})$/i;
+-                    const match = plateRegex.exec(normalizedText);
+-                    
+-                    if (match && confidence >= OCR_MIN_CONFIDENCE) {
+-                        bestMatch = {
+-                            text: normalizedText,
+-                            confidence: confidence,
+-                            parts: [match[1], match[2], match[3]],
+-                            canvasContext: ctx.getImageData(0, 0, canvas.width, canvas.height),
+-                            canvasW: canvas.width,
+-                            canvasH: canvas.height
+-                        };
+-                        break; // Geçerli plaka bulununca pipeline'ı durdur (Early return)
++                // OCR pipeline with timeout
++                const pipelinePromise = (async () => {
++                    for (const stage of stages) {
++                        if (sessionId !== ocrSessionId) break;
++
++                        // Restore original pixels before applying next stage
++                        ctx.putImageData(originalImageData, 0, 0);
++                        stage.apply(ctx, canvas.width, canvas.height);
++                        
++                        const result = await ocrWorker.recognize(canvas);
++                        if (sessionId !== ocrSessionId) break;
++
++                        const text = result.data.text;
++                        const confidence = result.data.confidence;
++                        const parsed = parseTurkishPlate(text);
++                        
++                        if (parsed && confidence >= OCR_MIN_CONFIDENCE) {
++                            bestMatch = {
++                                text: parsed.normalized,
++                                confidence: confidence,
++                                parts: [parsed.provinceCode.toString().padStart(2, '0'), parsed.letters, parsed.digits],
++                                canvasContext: ctx.getImageData(0, 0, canvas.width, canvas.height),
++                                canvasW: canvas.width,
++                                canvasH: canvas.height
++                            };
++                            break; // Early return
++                        }
+                     }
+-                }
++                })();
++
++                const timeoutPromise = new Promise((_, reject) => {
++                    setTimeout(() => reject(new Error("OCR Zaman Aşımı")), OCR_TOTAL_TIMEOUT_MS);
++                });
++
++                await Promise.race([pipelinePromise, timeoutPromise]);
++
++                if (sessionId !== ocrSessionId) return; // İptal edildiyse UI işlemleri yapma
+                 
+                 if (bestMatch) {
+                     currentOcrPlate = bestMatch.text;
+                     
+-                    // Debug Canvas'a sonucu çiz
+                     if (ocrDebugCanvas) {
+                         ocrDebugCanvas.width = bestMatch.canvasW;
+                         ocrDebugCanvas.height = bestMatch.canvasH;
+                         ocrDebugCanvas.getContext('2d').putImageData(bestMatch.canvasContext, 0, 0);
+                     }
+                     
+-                    // Modal'ı Doldur
+                     ocrResultText.textContent = bestMatch.parts[0] + " " + bestMatch.parts[1] + " " + bestMatch.parts[2];
+                     ocrConfidence.textContent = "%" + Math.round(bestMatch.confidence);
+                     
+@@ -359,8 +477,9 @@ document.addEventListener('DOMContentLoaded', () => {
+                         ocrConfidence.innerHTML += " (Düşük güven, lütfen kontrol edin!)";
+                     }
+                     
+-                    const isRegistered = checkPlateInDb(currentOcrPlate);
+-                    if (isRegistered) {
++                    const registeredValue = checkPlateInDb(currentOcrPlate);
++                    if (registeredValue) {
++                        currentOcrPlate = registeredValue; // Use the exact database match
+                         ocrDbStatus.innerHTML = '✅ Sistemde Bulundu';
+                         ocrDbStatus.style.color = "#4ade80";
+                         ocrConfirmBtn.disabled = false;
+@@ -368,9 +487,6 @@ document.addEventListener('DOMContentLoaded', () => {
+                     } else {
+                         ocrDbStatus.innerHTML = '❌ Kayıtlı Değil';
+                         ocrDbStatus.style.color = "#ef4444";
+-                        
+-                        // Sadece kayıtlı araçları seçmeye izin verdiğimiz için Onayla butonunu kapattık.
+-                        // Kullanıcı "Elle Düzelt" ile farklı bir plaka deneyebilir.
+                         ocrConfirmBtn.disabled = true;
+                         ocrConfirmBtn.style.opacity = "0.5";
+                     }
+@@ -382,12 +498,16 @@ document.addEventListener('DOMContentLoaded', () => {
+                     window.showToast('Plaka net okunamadı. Çerçeveye tam oturtup tekrar deneyin.', 'error');
+                 }
+             } catch (err) {
+-                console.error("OCR Hatası:", err);
+-                window.showToast('Okuma işlemi sırasında hata oluştu.', 'error');
++                if (sessionId === ocrSessionId) {
++                    console.error("OCR Hatası:", err);
++                    window.showToast(err.message === "OCR Zaman Aşımı" ? 'İşlem zaman aşımına uğradı.' : 'Okuma işlemi sırasında hata oluştu.', 'error');
++                }
+             } finally {
+-                isOcrProcessing = false;
+-                triggerOcrBtn.innerHTML = originalText;
+-                triggerOcrBtn.disabled = false;
++                if (sessionId === ocrSessionId) {
++                    isOcrProcessing = false;
++                    triggerOcrBtn.innerHTML = originalText;
++                    triggerOcrBtn.disabled = false;
++                }
+             }
+         });
+     }
+@@ -395,14 +515,14 @@ document.addEventListener('DOMContentLoaded', () => {
+     // Modal Event Listeners
+     if (ocrConfirmBtn) {
+         ocrConfirmBtn.addEventListener('click', () => {
+-            const finalPlate = ocrManualEditContainer.classList.contains('hidden') ? currentOcrPlate : normalizePlate(ocrManualInput.value);
++            const rawValue = ocrManualEditContainer.classList.contains('hidden') ? currentOcrPlate : ocrManualInput.value;
++            const registeredValue = checkPlateInDb(rawValue);
+             
+-            if (checkPlateInDb(finalPlate)) {
+-                plateSelect.value = finalPlate;
++            if (registeredValue) {
++                plateSelect.value = registeredValue;
+                 processBtn.disabled = false;
+-                ocrConfirmModal.classList.add('hidden');
+-                window.showToast(`Plaka Onaylandı: ${finalPlate}`, 'success');
+-                if (window.cameraController) window.cameraController.stopCamera();
++                closeCameraSafely();
++                window.showToast(`Plaka Onaylandı: ${registeredValue}`, 'success');
+             } else {
+                 window.showToast('Girilen plaka sistemde kayıtlı değil!', 'error');
+             }
+@@ -412,6 +532,7 @@ document.addEventListener('DOMContentLoaded', () => {
+     if (ocrRetryBtn) {
+         ocrRetryBtn.addEventListener('click', () => {
+             ocrConfirmModal.classList.add('hidden');
++            invalidateOcrSession();
+         });
+     }
+ 
+@@ -420,12 +541,52 @@ document.addEventListener('DOMContentLoaded', () => {
+             ocrManualEditContainer.classList.remove('hidden');
+             ocrManualInput.value = currentOcrPlate;
+             ocrManualInput.focus();
+-            
+-            // Kullanıcı düzenleme moduna geçince onayla butonunu aç (ancak yine de kayıtlıysa çalışacak)
++            validateManualInput(); // İlk açıldığında buton durumunu kontrol et
++        });
++    }
++
++    if (ocrManualInput) {
++        ocrManualInput.addEventListener('input', validateManualInput);
++    }
++
++    function validateManualInput() {
++        const val = ocrManualInput.value;
++        const registeredValue = checkPlateInDb(val);
++        if (registeredValue) {
+             ocrConfirmBtn.disabled = false;
+             ocrConfirmBtn.style.opacity = "1";
+-        });
++        } else {
++            ocrConfirmBtn.disabled = true;
++            ocrConfirmBtn.style.opacity = "0.5";
++        }
+     }
++
++    // Global Camera Cleanup Logic
++    function closeCameraSafely() {
++        invalidateOcrSession();
++        if (window.cameraController) {
++            window.cameraController.stopCamera();
++        }
++        if (ocrConfirmModal) {
++            ocrConfirmModal.classList.add('hidden');
++        }
++        isOcrProcessing = false;
++        if (triggerOcrBtn) {
++            triggerOcrBtn.innerHTML = '📷 Plakayı Oku';
++            triggerOcrBtn.disabled = false;
++        }
++    }
++
++    // Bind cleanup to navigation and page close events
++    window.addEventListener("pagehide", closeCameraSafely);
++    window.addEventListener("beforeunload", closeCameraSafely);
++
++    // Call ensureOcrWorker asynchronously when process starts (but don't block preview)
++    const oldStartProcess = startProcess;
++    startProcess = function(title, actionTypeStr) {
++        oldStartProcess(title, actionTypeStr);
++        ensureOcrWorker().catch(e => console.error("Ön yükleme hatası:", e));
++    };
+     function renderStep() {
+         if (state.currentStep === 1) {
+             step1Dot.classList.add('active');
+diff --git a/templates/index.html b/templates/index.html
+index 7d0021e..70c3bc4 100644
+--- a/templates/index.html
++++ b/templates/index.html
+@@ -317,8 +317,11 @@
+                 <div style="font-size: 2rem; font-weight: bold; letter-spacing: 2px; color: white; background: #1e3a8a; display: inline-block; padding: 5px 15px; border-radius: 6px; border: 2px solid #3b82f6;" id="ocr-result-text">34 ABC 123</div>
+                 
+                 <!-- Debug Canvas: Kameradan Tesseract'a gönderilen kırpılmış net alan -->
+-                <div style="margin-top: 15px; text-align: center;">
+-                    <p style="color: var(--text-secondary); font-size: 0.8rem; margin-bottom: 5px;">OCR İşlenen Görüntü (Debug)</p>
++                <div class="mt-4 flex flex-col items-center justify-center gap-2">
++                    <span class="text-xs text-gray-400 block mb-1">Orijinal Kırpım (ROI)</span>
++                    <canvas id="ocr-original-crop-canvas" style="max-width: 100%; height: 60px; border: 1px solid #475569; border-radius: 4px; background: #000;"></canvas>
++                    
++                    <span class="text-xs text-gray-400 block mb-1">OCR'a Giden Görüntü</span>
+                     <canvas id="ocr-debug-canvas" style="max-width: 100%; height: 60px; border: 1px solid #475569; border-radius: 4px; background: #000;"></canvas>
+                 </div>
+ 

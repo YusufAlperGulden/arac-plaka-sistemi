@@ -1,0 +1,55 @@
+{
+    "logs": [
+        {
+            "outputFile": "com.teknopalas.aracplaka.app-mergeReleaseResources-2:/values/values.xml",
+            "map": [
+                {
+                    "source": "C:\\Users\\stajyer\\Downloads\\Araç plakası\\android-app\\app\\src\\main\\res\\values\\styles.xml",
+                    "from": {
+                        "startLines": "2",
+                        "startColumns": "4",
+                        "startOffsets": "55",
+                        "endLines": "10",
+                        "endColumns": "12",
+                        "endOffsets": "574"
+                    },
+                    "to": {
+                        "startLines": "12",
+                        "startColumns": "4",
+                        "startOffsets": "807",
+                        "endLines": "20",
+                        "endColumns": "12",
+                        "endOffsets": "1326"
+                    }
+                },
+                {
+                    "source": "C:\\Users\\stajyer\\Downloads\\Araç plakası\\android-app\\app\\src\\main\\res\\values\\colors.xml",
+                    "from": {
+                        "startLines": "2",
+                        "startColumns": "4",
+                        "startOffsets": "55",
+                        "endColumns": "53",
+                        "endOffsets": "104"
+                    }
+                },
+                {
+                    "source": "C:\\Users\\stajyer\\Downloads\\Araç plakası\\android-app\\app\\src\\main\\res\\values\\strings.xml",
+                    "from": {
+                        "startLines": "2,9,8,4,3,6,10,7,5",
+                        "startColumns": "4,4,4,4,4,4,4,4,4",
+                        "startOffsets": "55,584,484,168,103,372,667,438,288",
+                        "endColumns": "47,82,99,119,64,65,85,45,83",
+                        "endOffsets": "98,662,579,283,163,433,748,479,367"
+                    },
+                    "to": {
+                        "startLines": "3,4,5,6,7,8,9,10,11",
+                        "startColumns": "4,4,4,4,4,4,4,4,4",
+                        "startOffsets": "109,157,240,340,460,525,591,677,723",
+                        "endColumns": "47,82,99,119,64,65,85,45,83",
+                        "endOffsets": "152,235,335,455,520,586,672,718,802"
+                    }
+                }
+            ]
+        }
+    ]
+}

@@ -1,0 +1,17 @@
+com.teknopalas.aracplaka:xml/network_security_config = 0x7f060001
+com.teknopalas.aracplaka:style/Theme.AracPlaka = 0x7f050000
+com.teknopalas.aracplaka:string/no_browser = 0x7f040006
+com.teknopalas.aracplaka:string/http_error = 0x7f040005
+com.teknopalas.aracplaka:string/retry = 0x7f040007
+com.teknopalas.aracplaka:string/camera_permission_denied = 0x7f040002
+com.teknopalas.aracplaka:string/secure_connection_error = 0x7f040008
+com.teknopalas.aracplaka:string/blocked_link = 0x7f040001
+com.teknopalas.aracplaka:string/app_name = 0x7f040000
+com.teknopalas.aracplaka:mipmap/ic_launcher = 0x7f030000
+com.teknopalas.aracplaka:xml/data_extraction_rules = 0x7f060000
+com.teknopalas.aracplaka:string/connection_error = 0x7f040003
+com.teknopalas.aracplaka:drawable/ic_launcher_monochrome = 0x7f020001
+com.teknopalas.aracplaka:color/launcher_background = 0x7f010000
+com.teknopalas.aracplaka:drawable/ic_launcher_foreground = 0x7f020000
+com.teknopalas.aracplaka:string/connection_title = 0x7f040004
+com.teknopalas.aracplaka:mipmap/ic_launcher_round = 0x7f030001

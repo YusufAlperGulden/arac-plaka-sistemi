@@ -134,7 +134,7 @@ body.light-mode {
     width: 100%;
     align-items: center;
     justify-content: center;
-    padding-top: 70px; /* Leave space for global top bar */
+     /* Leave space for global top bar */
     animation: fadeIn 0.5s ease-in-out;
 }
 
@@ -1374,4 +1374,31 @@ button {
 body.light-mode #global-top-bar button:hover {
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15) !important;
     background: rgba(0, 0, 0, 0.05) !important;
+}
+
+/* OCR Loading Bar */
+.ocr-loading-bar {
+    position: absolute;
+    bottom: -6px;
+    left: 0;
+    width: 100%;
+    height: 4px;
+    background: rgba(255, 255, 255, 0.3);
+    border-radius: 2px;
+    overflow: hidden;
+}
+.ocr-loading-bar::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -50%;
+    width: 50%;
+    height: 100%;
+    background: #22c55e;
+    animation: ocr-loading-anim 1s linear infinite;
+    border-radius: 2px;
+}
+@keyframes ocr-loading-anim {
+    0% { left: -50%; }
+    100% { left: 100%; }
 }

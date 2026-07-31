@@ -58,7 +58,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const actionSection = document.getElementById('action-selection-section');
     
     // Global Top Bar logic
-    const globalTopBar = document.getElementById('global-top-bar');
+    const globalTopBar = document.getElementById('floating-menu-container');
     if (globalTopBar && loginSection) {
         const observer = new MutationObserver(() => {
             globalTopBar.style.display = loginSection.classList.contains('hidden') ? 'flex' : 'none';
@@ -2813,11 +2813,21 @@ document.addEventListener('DOMContentLoaded', () => {
         plateDetectionBox.classList.remove('hidden');
         plateDetectionBox.classList.toggle('stable', isStable);
         plateDetectionBox.setAttribute('aria-hidden', 'false');
-        if (plateDetectionLabel) {
+                if (plateDetectionLabel) {
             plateDetectionLabel.textContent = isStable
-                ? 'Plaka bulundu • okunuyor'
-                : 'Plaka bulundu • sabit tutun';
+                ? 'Plaka Okunuyor..'
+                : 'Plaka bulundu, sabit tutun';
         }
+        
+        const ocrLoadingBar = document.getElementById('ocr-loading-bar');
+        if (ocrLoadingBar) {
+            if (isStable) {
+                ocrLoadingBar.classList.remove('hidden');
+            } else {
+                ocrLoadingBar.classList.add('hidden');
+            }
+        }
+
     }
 
     function deduplicateCrops(crops, maximumCount = 6) {
