@@ -2883,6 +2883,35 @@ def serialize_active_trip_report(active_trip):
     }
 
 
+def serialize_maintenance_report(m):
+    vehicle_name = get_database_vehicle_name(m.vehicle)
+    start_dt = datetime.combine(m.maintenance_date, time.min, tzinfo=APP_TIMEZONE)
+    start_iso = start_dt.isoformat()
+    end_iso = ""
+    if m.end_date:
+        end_dt = datetime.combine(m.end_date, time.min, tzinfo=APP_TIMEZONE)
+        end_iso = end_dt.isoformat()
+        
+    return {
+        "id": f"m_{m.id}",
+        "status": "Bakımda" if m.status == "ACTIVE" else "Bakım Bitti",
+        "status_key": "active" if m.status == "ACTIVE" else "completed",
+        "action_type": "Periyodik Bakım",
+        "start_date": start_iso,
+        "end_date": end_iso,
+        "add_date": start_iso,
+        "plate": m.vehicle.plate,
+        "vehicle_name": vehicle_name,
+        "driver": m.company_name,
+        "start_mileage": str(m.mileage),
+        "end_mileage": str(m.end_mileage) if m.end_mileage else "",
+        "distance": str(m.end_mileage - m.mileage) if m.end_mileage else "0",
+        "request_no": "-",
+        "service_form_no": "-",
+        "notes": m.description
+    }
+
+
 def get_report_ordering(model, sort_mode):
     descending = sort_mode.endswith("-desc")
     if sort_mode.startswith("distance-"):
@@ -2940,6 +2969,23 @@ def build_advanced_report_records(args, max_records=5000):
             serialize_active_trip_report(active_trip)
             for active_trip in active_trips
         )
+
+    maintenances = db.session.scalars(db.select(VehicleMaintenance)).all()
+    for m in maintenances:
+        if filters["status"] == "active" and m.status != "ACTIVE": continue
+        if filters["status"] == "completed" and m.status != "COMPLETED": continue
+        if filters["vehicle_id"] and m.vehicle_id != filters["vehicle_id"]: continue
+        if filters["date_from"] and m.maintenance_date < filters["date_from"]: continue
+        if filters["date_to"] and m.maintenance_date > filters["date_to"]: continue
+        if filters["plate"] and filters["plate"].lower() not in m.vehicle.plate.lower(): continue
+        if filters["action_type"] and filters["action_type"] not in ["Periyodik Bakım", "Bakım"]: continue
+        if filters["model_id"] and m.vehicle.model_id != filters["model_id"]: continue
+        if filters["brand_id"] and m.vehicle.model.brand_id != filters["brand_id"]: continue
+        if filters["search"]:
+            sv = filters["search"].lower()
+            if not (sv in m.vehicle.plate.lower() or sv in get_database_vehicle_name(m.vehicle).lower() or sv in m.company_name.lower() or sv in m.description.lower()):
+                continue
+        items.append(serialize_maintenance_report(m))
 
     sort_mode = filters["sort"]
     if sort_mode.startswith("distance-"):
