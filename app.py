@@ -3363,6 +3363,7 @@ def add_maintenance():
     company_name = data.get("company_name")
     maintenance_date_str = data.get("maintenance_date")
     mileage = data.get("mileage")
+    description = data.get("description", "")
 
     if not vehicle_id or not company_name or not maintenance_date_str or not mileage:
         return jsonify({"error": "Gerekli alanlar eksik."}), 400
@@ -3377,7 +3378,7 @@ def add_maintenance():
         company_name=company_name,
         maintenance_date=m_date,
         mileage=int(mileage),
-        description="",
+        description=description,
         cost=None,
         status="ACTIVE"
     )
@@ -3420,7 +3421,13 @@ def complete_maintenance(maintenance_id):
     maintenance.end_date = e_date
     maintenance.end_mileage = int(end_mileage)
     maintenance.cost = float(cost)
-    maintenance.description = description
+    
+    if description:
+        if maintenance.description:
+            maintenance.description = f"{maintenance.description}\n---\nSonuç: {description}"
+        else:
+            maintenance.description = description
+            
     maintenance.status = "COMPLETED"
 
     # Araç kilometresini güncelle
