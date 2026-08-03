@@ -315,6 +315,32 @@ class VehicleReminder(db.Model):
     vehicle = db.relationship("Vehicle", back_populates="reminders")
 
 
+class VehicleMaintenance(db.Model):
+    __tablename__ = "vehicle_maintenances"
+
+    id = db.Column(db.Integer, primary_key=True)
+    vehicle_id = db.Column(
+        db.Integer,
+        db.ForeignKey("vehicles.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    company_name = db.Column(db.String(120), nullable=False)
+    maintenance_date = db.Column(db.Date, nullable=False)
+    mileage = db.Column(db.Integer, nullable=False)
+    description = db.Column(db.Text, nullable=False, default="")
+    cost = db.Column(db.Float, nullable=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.now)
+    updated_at = db.Column(
+        db.DateTime,
+        nullable=False,
+        default=datetime.now,
+        onupdate=datetime.now,
+    )
+
+    vehicle = db.relationship("Vehicle", backref=db.backref("maintenances", cascade="all, delete-orphan", passive_deletes=True))
+
+
 class AppSetting(db.Model):
     __tablename__ = "app_settings"
 

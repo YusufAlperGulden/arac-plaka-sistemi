@@ -5437,4 +5437,147 @@ document.addEventListener('DOMContentLoaded', () => {
             profileModal.style.display = 'none';
         }
     };
+    // ==========================================
+    // ARAÇ BAKIM TAKİP MODÜLÜ
+    // ==========================================
+    window.showMaintenanceSection = async function() {
+        hideAllSections();
+        const section = document.getElementById('maintenance-section');
+        if (section) {
+            section.classList.remove('hidden');
+            section.classList.add('active');
+        }
+        
+        await loadMaintenanceVehicles();
+        window.switchMaintenanceTab('add');
+    };
+
+    window.switchMaintenanceTab = function(tab) {
+        const addView = document.getElementById('maintenance-add-view');
+        const listView = document.getElementById('maintenance-list-view');
+        const btnAdd = document.getElementById('tab-maintenance-add');
+        const btnList = document.getElementById('tab-maintenance-list');
+        
+        if (tab === 'add') {
+            addView.classList.remove('hidden');
+            listView.classList.add('hidden');
+            btnAdd.style.color = 'var(--primary-color)';
+            btnList.style.color = 'var(--text-secondary)';
+        } else {
+            addView.classList.add('hidden');
+            listView.classList.remove('hidden');
+            btnAdd.style.color = 'var(--text-secondary)';
+            btnList.style.color = 'var(--primary-color)';
+            window.fetchMaintenanceList();
+        }
+    };
+
+    async function loadMaintenanceVehicles() {
+        try {
+            const res = await fetch('/api/vehicles');
+            if (!res.ok) return;
+            const data = await res.json();
+            const select = document.getElementById('maintenance-vehicle');
+            select.innerHTML = '<option value="" disabled selected>Araç Seçiniz</option>';
+            data.forEach(v => {
+                const opt = document.createElement('option');
+                opt.value = v.id;
+                opt.textContent = v.plate;
+                select.appendChild(opt);
+            });
+        } catch (e) {
+            console.error('Araçlar yüklenemedi:', e);
+        }
+    }
+
+    window.submitMaintenanceForm = async function(e) {
+        e.preventDefault();
+        
+        const payload = {
+            vehicle_id: document.getElementById('maintenance-vehicle').value,
+            company_name: document.getElementById('maintenance-company').value,
+            maintenance_date: document.getElementById('maintenance-date').value,
+            mileage: document.getElementById('maintenance-mileage').value,
+            cost: document.getElementById('maintenance-cost').value || null,
+            description: document.getElementById('maintenance-desc').value
+        };
+
+        try {
+            const res = await fetch('/api/maintenances', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            const data = await res.json();
+            
+            if (res.ok) {
+                showToast(data.message || 'Başarıyla eklendi', 'success');
+                document.getElementById('maintenance-form').reset();
+                window.switchMaintenanceTab('list');
+            } else {
+                showToast(data.error || 'Hata oluştu', 'error');
+            }
+        } catch (err) {
+            showToast('Sunucu hatası', 'error');
+        }
+    };
+
+    window.fetchMaintenanceList = async function() {
+        const tbody = document.getElementById('maintenance-table-body');
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;">Yükleniyor...</td></tr>';
+        
+        try {
+            const res = await fetch('/api/maintenances');
+            const data = await res.json();
+            
+            if (!res.ok) {
+                tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; color:red;">${data.error || 'Hata'}</td></tr>`;
+                return;
+            }
+            
+            if (data.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;">Kayıt bulunamadı.</td></tr>';
+                return;
+            }
+            
+            tbody.innerHTML = '';
+            data.forEach(m => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td>${m.maintenance_date}</td>
+                    <td><span class="plate-badge" style="font-size:12px;">${m.plate}</span></td>
+                    <td>${m.company_name}</td>
+                    <td>${m.mileage}</td>
+                    <td>${m.cost ? m.cost + ' ₺' : '-'}</td>
+                    <td>
+                        ${state.isAdmin ? `<button onclick="deleteMaintenance(${m.id})" class="btn-secondary" style="color:#ef4444; border-color:rgba(239,68,68,0.3); padding:4px 8px; font-size:12px;">Sil</button>` : '-'}
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        } catch (err) {
+            tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color:red;">Bağlantı hatası.</td></tr>';
+        }
+    };
+
+    window.deleteMaintenance = async function(id) {
+        if (!confirm('Bu bakım kaydını silmek istediğinize emin misiniz?')) return;
+        
+        try {
+            const res = await fetch(`/api/maintenances/${id}`, {
+                method: 'DELETE'
+            });
+            const data = await res.json();
+            
+            if (res.ok) {
+                showToast(data.message || 'Silindi', 'success');
+                window.fetchMaintenanceList();
+            } else {
+                showToast(data.error || 'Hata', 'error');
+            }
+        } catch (err) {
+            showToast('Bağlantı hatası', 'error');
+        }
+    };
+
 });

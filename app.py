@@ -26,6 +26,7 @@ from models import (
     Vehicle,
     VehicleReminder,
     VehicleModel,
+    VehicleMaintenance,
     db,
 )
 from report_exports import export_csv, export_pdf, export_xlsx
@@ -3307,6 +3308,87 @@ def initialize_database():
 
 with app.app_context():
     initialize_database()
+
+
+@app.route("/api/maintenances", methods=["GET"])
+@require_authenticated
+def get_maintenances():
+    maintenances = VehicleMaintenance.query.join(Vehicle).order_by(VehicleMaintenance.maintenance_date.desc()).all()
+    results = []
+    for m in maintenances:
+        results.append({
+            "id": m.id,
+            "vehicle_id": m.vehicle_id,
+            "plate": m.vehicle.plate if m.vehicle else "Bilinmiyor",
+            "company_name": m.company_name,
+            "maintenance_date": m.maintenance_date.strftime("%Y-%m-%d"),
+            "mileage": m.mileage,
+            "description": m.description,
+            "cost": m.cost,
+            "created_at": m.created_at.strftime("%Y-%m-%d %H:%M:%S")
+        })
+    return jsonify(results), 200
+
+@app.route("/api/maintenances", methods=["POST"])
+@require_authenticated
+def add_maintenance():
+    data = request.json
+    if not data:
+        return jsonify({"error": "Veri bulunamadı."}), 400
+
+    vehicle_id = data.get("vehicle_id")
+    company_name = data.get("company_name")
+    maintenance_date_str = data.get("maintenance_date")
+    mileage = data.get("mileage")
+    description = data.get("description", "")
+    cost = data.get("cost")
+
+    if not vehicle_id or not company_name or not maintenance_date_str or not mileage:
+        return jsonify({"error": "Gerekli alanlar eksik."}), 400
+
+    try:
+        m_date = datetime.strptime(maintenance_date_str, "%Y-%m-%d").date()
+    except ValueError:
+        return jsonify({"error": "Geçersiz tarih formatı (YYYY-MM-DD olmalı)."}), 400
+
+    maintenance = VehicleMaintenance(
+        vehicle_id=vehicle_id,
+        company_name=company_name,
+        maintenance_date=m_date,
+        mileage=int(mileage),
+        description=description,
+        cost=float(cost) if cost else None
+    )
+
+    db.session.add(maintenance)
+    
+    # Araç kilometresini güncelle
+    vehicle = Vehicle.query.get(vehicle_id)
+    if vehicle and (vehicle.current_mileage is None or vehicle.current_mileage < int(mileage)):
+        vehicle.current_mileage = int(mileage)
+
+    try:
+        db.session.commit()
+        return jsonify({"message": "Bakım kaydı başarıyla eklendi.", "id": maintenance.id}), 201
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/maintenances/<int:maintenance_id>", methods=["DELETE"])
+@require_authenticated
+def delete_maintenance(maintenance_id):
+    if not session.get("is_admin"):
+        return jsonify({"error": "Yetkisiz işlem"}), 403
+
+    maintenance = VehicleMaintenance.query.get_or_404(maintenance_id)
+    try:
+        db.session.delete(maintenance)
+        db.session.commit()
+        return jsonify({"message": "Bakım kaydı silindi."}), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
 
 
 if __name__ == '__main__':
