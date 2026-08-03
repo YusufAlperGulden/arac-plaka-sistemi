@@ -1039,9 +1039,19 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const statusContainer = document.createElement('div');
             statusContainer.className = 'item-status';
-            const purposeBadge = createStatusBadge(true, item.is_available ? 'Müsait' : 'Kullanımda');
-            if (!item.is_available) {
+            
+            let statusText = item.is_available ? 'Müsait' : 'Kullanımda';
+            if (item.in_maintenance) {
+                statusText = 'BAKIMDA';
+            }
+            
+            const purposeBadge = createStatusBadge(true, statusText);
+            if (!item.is_available || item.in_maintenance) {
                 purposeBadge.classList.add('purpose');
+            }
+            if (item.in_maintenance) {
+                purposeBadge.style.backgroundColor = '#eab308';
+                purposeBadge.style.color = '#000';
             }
             statusContainer.appendChild(purposeBadge);
 
@@ -1050,7 +1060,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const actions = document.createElement('div');
             actions.className = 'item-actions';
             
-            if (item.is_available) {
+            if (item.is_available && !item.in_maintenance) {
                 const detailValues = [
                     ['Durum', 'Kullanıma Hazır'],
                     ['Güncel KM', item.start_mileage],
@@ -1074,6 +1084,18 @@ document.addEventListener('DOMContentLoaded', () => {
                         ''
                     )
                 ));
+            } else if (item.in_maintenance) {
+                const detailValues = [
+                    ['Durum', 'Serviste / Bakımda'],
+                    ['Güncel KM', item.start_mileage],
+                ];
+                detailValues.forEach(([label, value]) => {
+                    const detail = document.createElement('span');
+                    const strong = document.createElement('strong');
+                    strong.textContent = `${label}: `;
+                    detail.append(strong, document.createTextNode(value || '-'));
+                    details.appendChild(detail);
+                });
             } else {
                 const detailValues = [
                     ['Başlangıç', item.start_date],
