@@ -5557,7 +5557,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             
             if (data.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;">Kayıt bulunamadı.</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding: 40px 0; color: var(--text-secondary); font-size: 1.1em;">Kayıt bulunamadı.</td></tr>';
                 return;
             }
             
