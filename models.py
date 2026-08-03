@@ -327,9 +327,12 @@ class VehicleMaintenance(db.Model):
     )
     company_name = db.Column(db.String(120), nullable=False)
     maintenance_date = db.Column(db.Date, nullable=False)
+    end_date = db.Column(db.Date, nullable=True)
     mileage = db.Column(db.Integer, nullable=False)
+    end_mileage = db.Column(db.Integer, nullable=True)
     description = db.Column(db.Text, nullable=False, default="")
     cost = db.Column(db.Float, nullable=True)
+    status = db.Column(db.String(20), nullable=False, default="COMPLETED")
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.now)
     updated_at = db.Column(
         db.DateTime,

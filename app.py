@@ -469,6 +469,7 @@ def link_vehicle_history(vehicle):
 def serialize_database_vehicle(vehicle):
     vehicle_name = get_database_vehicle_name(vehicle)
     display_plate = format_plate_for_display(vehicle.plate)
+    in_maintenance = any(m.status == 'ACTIVE' for m in vehicle.maintenances) if hasattr(vehicle, 'maintenances') else False
     return {
         "id": vehicle.id,
         "plate": vehicle.plate,
@@ -480,8 +481,9 @@ def serialize_database_vehicle(vehicle):
         "year": vehicle.year,
         "current_mileage": vehicle.current_mileage,
         "active": vehicle.active,
+        "in_maintenance": in_maintenance,
         "vehicle_name": vehicle_name,
-        "display_label": f"{vehicle_name} - {display_plate}",
+        "display_label": f"{vehicle_name} ({display_plate})",
     }
 
 
@@ -1011,6 +1013,20 @@ def save_record():
                 "message": "Geçerli ve aktif bir hareket türü seçmelisiniz.",
             }), 400
         action_type = canonical_action_type
+        
+        # Check if vehicle is in maintenance
+        if vehicle is not None:
+            active_maintenance = db.session.scalar(
+                db.select(VehicleMaintenance)
+                .where(VehicleMaintenance.vehicle_id == vehicle.id)
+                .where(VehicleMaintenance.status == 'ACTIVE')
+            )
+            if active_maintenance:
+                return jsonify({
+                    "success": False,
+                    "message": f"{plate} plakalı araç şu anda bakımda olduğu için teslim edilemez.",
+                }), 409
+
         existing_trip = db.session.scalar(
             db.select(ActiveTrip).where(ActiveTrip.plate == plate)
         )
@@ -3313,7 +3329,11 @@ with app.app_context():
 @app.route("/api/maintenances", methods=["GET"])
 @require_authenticated
 def get_maintenances():
-    maintenances = VehicleMaintenance.query.join(Vehicle).order_by(VehicleMaintenance.maintenance_date.desc()).all()
+    maintenances = VehicleMaintenance.query.join(Vehicle).order_by(
+        # Aktif olanları en üstte göster, ardından tarihe göre
+        db.case((VehicleMaintenance.status == 'ACTIVE', 0), else_=1),
+        VehicleMaintenance.maintenance_date.desc()
+    ).all()
     results = []
     for m in maintenances:
         results.append({
@@ -3322,9 +3342,12 @@ def get_maintenances():
             "plate": m.vehicle.plate if m.vehicle else "Bilinmiyor",
             "company_name": m.company_name,
             "maintenance_date": m.maintenance_date.strftime("%Y-%m-%d"),
+            "end_date": m.end_date.strftime("%Y-%m-%d") if m.end_date else None,
             "mileage": m.mileage,
+            "end_mileage": m.end_mileage,
             "description": m.description,
             "cost": m.cost,
+            "status": m.status,
             "created_at": m.created_at.strftime("%Y-%m-%d %H:%M:%S")
         })
     return jsonify(results), 200
@@ -3340,8 +3363,6 @@ def add_maintenance():
     company_name = data.get("company_name")
     maintenance_date_str = data.get("maintenance_date")
     mileage = data.get("mileage")
-    description = data.get("description", "")
-    cost = data.get("cost")
 
     if not vehicle_id or not company_name or not maintenance_date_str or not mileage:
         return jsonify({"error": "Gerekli alanlar eksik."}), 400
@@ -3356,8 +3377,9 @@ def add_maintenance():
         company_name=company_name,
         maintenance_date=m_date,
         mileage=int(mileage),
-        description=description,
-        cost=float(cost) if cost else None
+        description="",
+        cost=None,
+        status="ACTIVE"
     )
 
     db.session.add(maintenance)
@@ -3369,7 +3391,45 @@ def add_maintenance():
 
     try:
         db.session.commit()
-        return jsonify({"message": "Bakım kaydı başarıyla eklendi.", "id": maintenance.id}), 201
+        return jsonify({"message": "Araç bakıma gönderildi.", "id": maintenance.id}), 201
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/api/maintenances/<int:maintenance_id>/complete", methods=["PATCH"])
+@require_authenticated
+def complete_maintenance(maintenance_id):
+    maintenance = VehicleMaintenance.query.get_or_404(maintenance_id)
+    if maintenance.status == "COMPLETED":
+        return jsonify({"error": "Bu bakım zaten tamamlanmış."}), 400
+
+    data = request.json
+    end_date_str = data.get("end_date")
+    end_mileage = data.get("end_mileage")
+    cost = data.get("cost")
+    description = data.get("description", "")
+
+    if not end_date_str or not end_mileage or cost is None:
+        return jsonify({"error": "Tutar, Çıkış Tarihi ve Dönüş KM'si zorunludur."}), 400
+
+    try:
+        e_date = datetime.strptime(end_date_str, "%Y-%m-%d").date()
+    except ValueError:
+        return jsonify({"error": "Geçersiz tarih formatı."}), 400
+
+    maintenance.end_date = e_date
+    maintenance.end_mileage = int(end_mileage)
+    maintenance.cost = float(cost)
+    maintenance.description = description
+    maintenance.status = "COMPLETED"
+
+    # Araç kilometresini güncelle
+    if maintenance.vehicle and (maintenance.vehicle.current_mileage is None or maintenance.vehicle.current_mileage < maintenance.end_mileage):
+        maintenance.vehicle.current_mileage = maintenance.end_mileage
+
+    try:
+        db.session.commit()
+        return jsonify({"message": "Bakım başarıyla tamamlandı."}), 200
     except Exception as e:
         db.session.rollback()
         return jsonify({"error": str(e)}), 500

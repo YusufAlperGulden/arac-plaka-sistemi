@@ -58,6 +58,11 @@ _COLUMN_EXTENSIONS = {
             "VARCHAR(120) NOT NULL DEFAULT ''",
         ),
     ),
+    "vehicle_maintenances": (
+        ("status", "VARCHAR(20) NOT NULL DEFAULT 'COMPLETED'"),
+        ("end_date", "DATE"),
+        ("end_mileage", "INTEGER"),
+    ),
 }
 
 

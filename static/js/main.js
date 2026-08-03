@@ -5117,6 +5117,10 @@ document.addEventListener('DOMContentLoaded', () => {
         let optionsAdded = 0;
         
         vehicles.forEach(vehicle => {
+            // Bakımdaki araçları işlemden gizle
+            if (vehicle.in_maintenance) {
+                return;
+            }
             if (state.currentAction === 'dropoff' && !activePlates.has(vehicle.plate)) return;
             if (state.currentAction === 'pickup' && activePlates.has(vehicle.plate)) return;
 
@@ -5478,6 +5482,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 showToast(data.message || 'Başarıyla eklendi', 'success');
                 document.getElementById('maintenance-form').reset();
                 window.switchMainMaintenanceTab('list');
+                await fetchPlates();
             } else {
                 showToast(data.error || 'Hata oluştu', 'error');
             }
@@ -5539,33 +5544,43 @@ document.addEventListener('DOMContentLoaded', () => {
 
     window.fetchMaintenanceList = async function() {
         const tbody = document.getElementById('maintenance-table-body');
-        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;">Yükleniyor...</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;">Yükleniyor...</td></tr>';
         
         try {
             const res = await fetch('/api/maintenances');
             const data = await res.json();
             
             if (!res.ok) {
-                tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; color:red;">${data.error || 'Hata'}</td></tr>`;
+                tbody.innerHTML = `<tr><td colspan="9" style="text-align:center; color:red;">${data.error || 'Hata'}</td></tr>`;
                 return;
             }
             
             if (data.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding: 40px 0; color: var(--text-secondary); font-size: 1.1em;">Kayıt bulunamadı.</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="9" style="text-align:center; padding: 40px 0; color: var(--text-secondary); font-size: 1.1em;">Kayıt bulunamadı.</td></tr>';
                 return;
             }
             
             tbody.innerHTML = '';
             data.forEach(m => {
                 const tr = document.createElement('tr');
+                const statusBadge = m.status === 'ACTIVE' 
+                    ? '<span class="status-badge status-active" style="background:#eab308; color:#fff; padding:4px 8px; border-radius:4px; font-size:11px; font-weight:bold;">BAKIMDA</span>'
+                    : '<span class="status-badge status-completed" style="background:#22c55e; color:#fff; padding:4px 8px; border-radius:4px; font-size:11px; font-weight:bold;">BİTTİ</span>';
+                
                 tr.innerHTML = `
+                    <td>${statusBadge}</td>
                     <td>${m.maintenance_date}</td>
+                    <td>${m.end_date ? m.end_date : '-'}</td>
                     <td><span class="plate-badge" style="font-size:12px;">${m.plate}</span></td>
                     <td>${m.company_name}</td>
                     <td>${m.mileage}</td>
+                    <td>${m.end_mileage ? m.end_mileage : '-'}</td>
                     <td>${m.cost ? m.cost + ' ₺' : '-'}</td>
                     <td>
-                        ${state.isAdmin ? `<button onclick="deleteMaintenance(${m.id})" class="btn-secondary" style="color:#ef4444; border-color:rgba(239,68,68,0.3); padding:4px 8px; font-size:12px;">Sil</button>` : '-'}
+                        <div style="display: flex; gap: 5px;">
+                            ${m.status === 'ACTIVE' ? `<button onclick="completeMaintenance(${m.id})" class="btn-primary" style="padding:4px 8px; font-size:12px;">Bitir</button>` : ''}
+                            ${state.isAdmin ? `<button onclick="deleteMaintenance(${m.id})" class="btn-secondary" style="color:#ef4444; border-color:rgba(239,68,68,0.3); padding:4px 8px; font-size:12px;">Sil</button>` : ''}
+                        </div>
                     </td>
                 `;
                 tbody.appendChild(tr);
@@ -5592,6 +5607,63 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         } catch (err) {
             showToast('Bağlantı hatası', 'error');
+        }
+    };
+
+    window.completeMaintenance = async function(id) {
+        const { value: formValues } = await Swal.fire({
+            title: 'Bakımı Tamamla',
+            html:
+                '<input id="swal-end-date" type="date" class="swal2-input" placeholder="Bitiş Tarihi">' +
+                '<input id="swal-end-mileage" type="number" class="swal2-input" placeholder="Dönüş KM\'si">' +
+                '<input id="swal-cost" type="number" step="0.01" class="swal2-input" placeholder="Tutar (₺)">' +
+                '<textarea id="swal-desc" class="swal2-textarea" placeholder="Yapılan İşlemler / Açıklama"></textarea>',
+            focusConfirm: false,
+            showCancelButton: true,
+            confirmButtonText: 'Kaydet',
+            cancelButtonText: 'İptal',
+            didOpen: () => {
+                document.getElementById('swal-end-date').value = new Date().toISOString().split('T')[0];
+            },
+            preConfirm: () => {
+                const endDate = document.getElementById('swal-end-date').value;
+                const endMileage = document.getElementById('swal-end-mileage').value;
+                const cost = document.getElementById('swal-cost').value;
+                
+                if (!endDate || !endMileage || !cost) {
+                    Swal.showValidationMessage('Tarih, Bitiş KM ve Tutar alanları zorunludur.');
+                    return false;
+                }
+                
+                return {
+                    end_date: endDate,
+                    end_mileage: endMileage,
+                    cost: cost,
+                    description: document.getElementById('swal-desc').value
+                };
+            }
+        });
+
+        if (formValues) {
+            try {
+                const res = await fetch(`/api/maintenances/${id}/complete`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(formValues)
+                });
+                const data = await res.json();
+                
+                if (res.ok) {
+                    showToast(data.message || 'Bakım tamamlandı', 'success');
+                    window.fetchMaintenanceList();
+                    // Bakım bitince araçları yeniden yükle (Müsait listesine girsin diye)
+                    await fetchPlates();
+                } else {
+                    Swal.fire('Hata', data.error || 'İşlem başarısız', 'error');
+                }
+            } catch (err) {
+                Swal.fire('Hata', 'Bağlantı hatası', 'error');
+            }
         }
     };
 
