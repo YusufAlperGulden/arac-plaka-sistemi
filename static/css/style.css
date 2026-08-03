@@ -218,7 +218,7 @@ body.light-mode {
 }
 
 #action-selection-section .action-buttons-grid {
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(4, 1fr);
 }
 
 .wide-action-btn {
@@ -730,7 +730,7 @@ button {
 
 .summary-grid {
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(4, 1fr);
     gap: 12px;
     margin-bottom: 20px;
 }
@@ -769,7 +769,7 @@ button {
 
 .management-tabs {
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(4, 1fr);
     gap: 8px;
     margin-bottom: 18px;
 }
