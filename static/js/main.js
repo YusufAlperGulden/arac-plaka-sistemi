@@ -5613,11 +5613,13 @@ document.addEventListener('DOMContentLoaded', () => {
     window.completeMaintenance = async function(id) {
         const { value: formValues } = await Swal.fire({
             title: 'Bakımı Tamamla',
+            background: '#1e293b',
+            color: '#f8fafc',
             html:
-                '<input id="swal-end-date" type="date" class="swal2-input" placeholder="Bitiş Tarihi">' +
-                '<input id="swal-end-mileage" type="number" class="swal2-input" placeholder="Dönüş KM\'si">' +
-                '<input id="swal-cost" type="number" step="0.01" class="swal2-input" placeholder="Tutar (₺)">' +
-                '<textarea id="swal-desc" class="swal2-textarea" placeholder="Yapılan İşlemler / Açıklama"></textarea>',
+                '<input id="swal-end-date" type="date" class="swal2-input" placeholder="Bitiş Tarihi" style="background:#0f172a; color:#fff; border:1px solid #3b82f6;">' +
+                '<input id="swal-end-mileage" type="number" class="swal2-input" placeholder="Dönüş KM\'si" style="background:#0f172a; color:#fff; border:1px solid #3b82f6;">' +
+                '<input id="swal-cost" type="number" step="0.01" class="swal2-input" placeholder="Tutar (₺)" style="background:#0f172a; color:#fff; border:1px solid #3b82f6;">' +
+                '<textarea id="swal-desc" class="swal2-textarea" placeholder="Yapılan İşlemler / Açıklama" style="background:#0f172a; color:#fff; border:1px solid #3b82f6;"></textarea>',
             focusConfirm: false,
             showCancelButton: true,
             confirmButtonText: 'Kaydet',
