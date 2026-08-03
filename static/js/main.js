@@ -1392,7 +1392,9 @@ document.addEventListener('DOMContentLoaded', () => {
         maintenanceStatusFilter.value = 'all';
         resetMaintenanceReminderForm();
         loadMaintenanceReminders();
+        if (window.switchMaintenanceCenterTab) window.switchMaintenanceCenterTab('reminders');
     }
+
 
     function showFleetTab(tabName) {
         fleetTabs.forEach(tab => {
@@ -5440,34 +5442,35 @@ document.addEventListener('DOMContentLoaded', () => {
     // ==========================================
     // ARAÇ BAKIM TAKİP MODÜLÜ
     // ==========================================
-    window.showMaintenanceSection = async function() {
-        hideAllSections();
-        const section = document.getElementById('maintenance-section');
-        if (section) {
-            section.classList.remove('hidden');
-            section.classList.add('active');
-        }
-        
-        await loadMaintenanceVehicles();
-        window.switchMaintenanceTab('add');
-    };
-
-    window.switchMaintenanceTab = function(tab) {
+    window.switchMaintenanceCenterTab = async function(tab) {
+        const remindersView = document.getElementById('maintenance-reminders-view');
         const addView = document.getElementById('maintenance-add-view');
         const listView = document.getElementById('maintenance-list-view');
+        
+        const btnReminders = document.getElementById('tab-maintenance-reminders');
         const btnAdd = document.getElementById('tab-maintenance-add');
         const btnList = document.getElementById('tab-maintenance-list');
         
-        if (tab === 'add') {
-            addView.classList.remove('hidden');
-            listView.classList.add('hidden');
-            btnAdd.style.color = 'var(--primary-color)';
-            btnList.style.color = 'var(--text-secondary)';
-        } else {
-            addView.classList.add('hidden');
-            listView.classList.remove('hidden');
-            btnAdd.style.color = 'var(--text-secondary)';
-            btnList.style.color = 'var(--primary-color)';
+        // Önce hepsini gizle
+        if(remindersView) remindersView.classList.add('hidden');
+        if(addView) addView.classList.add('hidden');
+        if(listView) listView.classList.add('hidden');
+        
+        // Buton renklerini sıfırla
+        if(btnReminders) btnReminders.style.color = 'var(--text-secondary)';
+        if(btnAdd) btnAdd.style.color = 'var(--text-secondary)';
+        if(btnList) btnList.style.color = 'var(--text-secondary)';
+
+        if (tab === 'reminders') {
+            if(remindersView) remindersView.classList.remove('hidden');
+            if(btnReminders) btnReminders.style.color = 'var(--primary-color)';
+        } else if (tab === 'add') {
+            if(addView) addView.classList.remove('hidden');
+            if(btnAdd) btnAdd.style.color = 'var(--primary-color)';
+            await loadMaintenanceVehicles();
+        } else if (tab === 'list') {
+            if(listView) listView.classList.remove('hidden');
+            if(btnList) btnList.style.color = 'var(--primary-color)';
             window.fetchMaintenanceList();
         }
     };
@@ -5513,7 +5516,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (res.ok) {
                 showToast(data.message || 'Başarıyla eklendi', 'success');
                 document.getElementById('maintenance-form').reset();
-                window.switchMaintenanceTab('list');
+                window.switchMaintenanceCenterTab('list');
             } else {
                 showToast(data.error || 'Hata oluştu', 'error');
             }

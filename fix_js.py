@@ -3,63 +3,82 @@ import re
 with open(r'static\js\main.js', 'r', encoding='utf-8') as f:
     text = f.read()
 
-# The block to remove is from:
-# document.addEventListener('DOMContentLoaded', () => {
-#    const profilePhotoInput = document.getElementById('profile-photo-input');
-#    ...
-#    // Fotoğraf Seçimi ve Canvas ile Küçültme
+old_js = '''    window.showMaintenanceSection = async function() {
+        hideAllSections();
+        const section = document.getElementById('maintenance-section');
+        if (section) {
+            section.classList.remove('hidden');
+            section.classList.add('active');
+        }
+        
+        await loadMaintenanceVehicles();
+        window.switchMaintenanceTab('add');
+    };
 
-search_str = r"document\.addEventListener\('DOMContentLoaded', \(\) => \{\n\s+const profilePhotoInput = document\.getElementById\('profile-photo-input'\);\n\s+const profileUpdateForm = document\.getElementById\('profile-update-form'\);\n\s+const profileBtn = document\.getElementById\('header-profile-btn'\);\n\s+const profileModal = document\.getElementById\('profile-modal'\);\n\s+const closeProfileBtn = document\.getElementById\('close-profile-modal'\);\n\s+const cancelProfileBtn = document\.getElementById\('cancel-profile-btn'\);\n\n\s+if \(profileBtn && profileModal\) \{\n\s+profileBtn\.addEventListener\('click', \(e\) => \{\n\s+e\.preventDefault\(\);\n\s+e\.stopPropagation\(\);\n\s+\n\s+const profileFullname = document\.getElementById\('profile-fullname'\);\n\s+const profilePassword = document\.getElementById\('profile-password'\);\n\s+const profileModalImg = document\.getElementById\('profile-modal-img'\);\n\s+const profileModalPlaceholder = document\.getElementById\('profile-modal-placeholder'\);\n\s+\n\s+if \(profileFullname\) profileFullname\.value = state\.fullName \|\| state\.username \|\| '';\n\s+if \(profilePassword\) profilePassword\.value = '';\n\s+currentBase64Photo = state\.profilePhoto \|\| '';\n\s+\n\s+if \(currentBase64Photo && profileModalImg\) \{\n\s+profileModalImg\.src = currentBase64Photo;\n\s+profileModalImg\.style\.display = 'block';\n\s+if \(profileModalPlaceholder\) profileModalPlaceholder\.style\.display = 'none';\n\s+\} else if \(profileModalImg && profileModalPlaceholder\) \{\n\s+profileModalImg\.src = '';\n\s+profileModalImg\.style\.display = 'none';\n\s+profileModalPlaceholder\.style\.display = 'flex';\n\s+const char = \(state\.fullName \|\| state\.username \|\| 'P'\)\.charAt\(0\)\.toUpperCase\(\);\n\s+profileModalPlaceholder\.textContent = char;\n\s+\}\n\s+\n\s+profileModal\.classList\.add\('active'\);\n\s+\}\);\n\s+\}\n\n\s+const closeModalHandler = \(e\) => \{\n\s+if \(e\) \{\n\s+e\.preventDefault\(\);\n\s+e\.stopPropagation\(\);\n\s+\}\n\s+if \(profileModal\) profileModal\.classList\.remove\('active'\);\n\s+\};\n\n\s+if \(closeProfileBtn\) closeProfileBtn\.addEventListener\('click', closeModalHandler\);\n\s+if \(cancelProfileBtn\) cancelProfileBtn\.addEventListener\('click', closeModalHandler\);\n\n\s+//"
+    window.switchMaintenanceTab = function(tab) {
+        const addView = document.getElementById('maintenance-add-view');
+        const listView = document.getElementById('maintenance-list-view');
+        const btnAdd = document.getElementById('tab-maintenance-add');
+        const btnList = document.getElementById('tab-maintenance-list');
+        
+        if (tab === 'add') {
+            addView.classList.remove('hidden');
+            listView.classList.add('hidden');
+            btnAdd.style.color = 'var(--primary-color)';
+            btnList.style.color = 'var(--text-secondary)';
+        } else {
+            addView.classList.add('hidden');
+            listView.classList.remove('hidden');
+            btnAdd.style.color = 'var(--text-secondary)';
+            btnList.style.color = 'var(--primary-color)';
+            window.fetchMaintenanceList();
+        }
+    };'''
 
-replace_str = r"""window.openProfileModal = function(e) {
-    if (e) {
-        e.preventDefault();
-        e.stopPropagation();
-    }
-    const profileModal = document.getElementById('profile-modal');
-    const profileFullname = document.getElementById('profile-fullname');
-    const profilePassword = document.getElementById('profile-password');
-    const profileModalImg = document.getElementById('profile-modal-img');
-    const profileModalPlaceholder = document.getElementById('profile-modal-placeholder');
-    
-    if (profileFullname) profileFullname.value = state.fullName || state.username || '';
-    if (profilePassword) profilePassword.value = '';
-    currentBase64Photo = state.profilePhoto || '';
-    
-    if (currentBase64Photo && profileModalImg) {
-        profileModalImg.src = currentBase64Photo;
-        profileModalImg.style.display = 'block';
-        if (profileModalPlaceholder) profileModalPlaceholder.style.display = 'none';
-    } else if (profileModalImg && profileModalPlaceholder) {
-        profileModalImg.src = '';
-        profileModalImg.style.display = 'none';
-        profileModalPlaceholder.style.display = 'flex';
-        const char = (state.fullName || state.username || 'P').charAt(0).toUpperCase();
-        profileModalPlaceholder.textContent = char;
-    }
-    
-    if (profileModal) profileModal.classList.add('active');
-};
+new_js = '''    window.switchMaintenanceCenterTab = async function(tab) {
+        const remindersView = document.getElementById('maintenance-reminders-view');
+        const addView = document.getElementById('maintenance-add-view');
+        const listView = document.getElementById('maintenance-list-view');
+        
+        const btnReminders = document.getElementById('tab-maintenance-reminders');
+        const btnAdd = document.getElementById('tab-maintenance-add');
+        const btnList = document.getElementById('tab-maintenance-list');
+        
+        // Önce hepsini gizle
+        if(remindersView) remindersView.classList.add('hidden');
+        if(addView) addView.classList.add('hidden');
+        if(listView) listView.classList.add('hidden');
+        
+        // Buton renklerini sıfırla
+        if(btnReminders) btnReminders.style.color = 'var(--text-secondary)';
+        if(btnAdd) btnAdd.style.color = 'var(--text-secondary)';
+        if(btnList) btnList.style.color = 'var(--text-secondary)';
 
-window.closeProfileModal = function(e) {
-    if (e) {
-        e.preventDefault();
-        e.stopPropagation();
-    }
-    const profileModal = document.getElementById('profile-modal');
-    if (profileModal) profileModal.classList.remove('active');
-};
+        if (tab === 'reminders') {
+            if(remindersView) remindersView.classList.remove('hidden');
+            if(btnReminders) btnReminders.style.color = 'var(--primary-color)';
+        } else if (tab === 'add') {
+            if(addView) addView.classList.remove('hidden');
+            if(btnAdd) btnAdd.style.color = 'var(--primary-color)';
+            await loadMaintenanceVehicles();
+        } else if (tab === 'list') {
+            if(listView) listView.classList.remove('hidden');
+            if(btnList) btnList.style.color = 'var(--primary-color)';
+            window.fetchMaintenanceList();
+        }
+    };'''
 
-document.addEventListener('DOMContentLoaded', () => {
-    const profilePhotoInput = document.getElementById('profile-photo-input');
-    const profileUpdateForm = document.getElementById('profile-update-form');
+text = text.replace(old_js, new_js)
+text = text.replace("window.switchMaintenanceTab('list');", "window.switchMaintenanceCenterTab('list');")
 
-    //"""
+# Remove hideAllSections logic if needed. wait, `#maintenance-reminders-section` is opened using standard logic via button clicks in the management UI.
+# In management UI: document.getElementById('maintenance-reminders-btn').addEventListener('click', ...
+# The event listener in main.js needs to open 'reminders' tab by default.
+# Let's see how it's opened. It just calls: `document.getElementById('maintenance-reminders-section').classList.remove('hidden');`
+# I should inject `window.switchMaintenanceCenterTab('reminders');` where this section is opened.
+# I'll search for `maintenance-reminders-btn` click event.
 
-new_text = re.sub(search_str, replace_str, text, count=1)
-if new_text == text:
-    print('Failed to replace.')
-else:
-    with open(r'static\js\main.js', 'w', encoding='utf-8') as f:
-        f.write(new_text)
-    print('Replaced main.js successfully.')
+with open(r'static\js\main.js', 'w', encoding='utf-8') as f:
+    f.write(text)
+
+print('JS updated.')
