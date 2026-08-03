@@ -327,6 +327,74 @@
             <div id="maintenance-reminder-list" class="management-list" aria-live="polite">
                 <p class="empty-state">Yükleniyor...</p>
             </div>
+
+            <!-- Ekleme Formu (YENİ) -->
+            <div id="maintenance-add-view" class="hidden">
+                <div style="margin-bottom:15px; color:var(--text-secondary); text-align:center;">
+                    <p>Araçlarınızın servis, bakım ve onarım geçmişlerini buradan sisteme kaydedebilirsiniz.</p>
+                </div>
+                <form id="maintenance-form" onsubmit="window.submitMaintenanceForm(event)" class="management-form glass-panel">
+                    <div class="responsive-form-grid">
+                        <div class="input-group">
+                            <label for="maintenance-vehicle">Araç (Plaka)</label>
+                            <select id="maintenance-vehicle" required>
+                                <option value="" disabled selected>Araç Seçin...</option>
+                            </select>
+                        </div>
+                        <div class="input-group">
+                            <label for="maintenance-company">Bakım Firması</label>
+                            <input type="text" id="maintenance-company" required placeholder="Örn: Bosch Car Service">
+                        </div>
+                        <div class="input-group">
+                            <label for="maintenance-date">Bakım Tarihi</label>
+                            <input type="date" id="maintenance-date" required>
+                        </div>
+                        <div class="input-group">
+                            <label for="maintenance-mileage">Kilometre (KM)</label>
+                            <input type="number" id="maintenance-mileage" required placeholder="Örn: 150000">
+                        </div>
+                        <div class="input-group">
+                            <label for="maintenance-cost">Tutar (Opsiyonel)</label>
+                            <input type="number" step="0.01" id="maintenance-cost" placeholder="Örn: 1500.50">
+                        </div>
+                        <div class="input-group form-grid-wide">
+                            <label for="maintenance-desc">Yapılan İşlemler / Açıklama</label>
+                            <textarea id="maintenance-desc" rows="3" placeholder="Örn: Periyodik bakım, yağ değişimi, filtreler değiştirildi vs."></textarea>
+                        </div>
+                    </div>
+                    <div class="form-actions">
+                        <button type="submit" class="btn-primary">Kaydet</button>
+                    </div>
+                </form>
+            </div>
+
+
+            <!-- Listeleme Ekranı (YENİ) -->
+            <div id="maintenance-list-view" class="hidden">
+                <div style="margin-bottom:15px; color:var(--text-secondary); text-align:center;">
+                    <p>Sisteme daha önceden kaydedilmiş tüm araç bakım geçmişi dökümü.</p>
+                </div>
+                <div class="management-list aria-live="polite">
+                    <div class="table-responsive" style="max-height:400px; overflow-y:auto;">
+                        <table class="report-table" style="width:100%;">
+                            <thead>
+                                <tr>
+                                    <th>Tarih</th>
+                                    <th>Plaka</th>
+                                    <th>Firma</th>
+                                    <th>KM</th>
+                                    <th>Tutar</th>
+                                    <th>İşlem</th>
+                                </tr>
+                            </thead>
+                            <tbody id="maintenance-table-body">
+                                <tr><td colspan="6" style="text-align:center;">Yükleniyor...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
         </div>
     </section>
 
@@ -886,55 +954,6 @@
             </div>
         </main>
     </div>
-
-            <!-- Ekleme Formu (YENİ) -->
-            <div id="maintenance-add-view" class="hidden">
-                <form id="maintenance-form" onsubmit="window.submitMaintenanceForm(event)">
-                    <label for="maintenance-vehicle" style="margin-top:10px; display:block;">Araç (Plaka)</label>
-                    <select id="maintenance-vehicle" style="width:100%; padding:10px; margin-bottom:10px; border-radius:8px;" required></select>
-
-                    <label for="maintenance-company" style="margin-top:10px; display:block;">Bakım Firması</label>
-                    <input type="text" id="maintenance-company" style="width:100%; padding:10px; margin-bottom:10px; border-radius:8px;" required placeholder="Firma Adı">
-
-                    <label for="maintenance-date" style="margin-top:10px; display:block;">Bakım Tarihi</label>
-                    <input type="date" id="maintenance-date" style="width:100%; padding:10px; margin-bottom:10px; border-radius:8px;" required>
-
-                    <label for="maintenance-mileage" style="margin-top:10px; display:block;">Kilometre (KM)</label>
-                    <input type="number" id="maintenance-mileage" style="width:100%; padding:10px; margin-bottom:10px; border-radius:8px;" required placeholder="Örn: 150000">
-
-                    <label for="maintenance-cost" style="margin-top:10px; display:block;">Tutar (Opsiyonel)</label>
-                    <input type="number" step="0.01" id="maintenance-cost" style="width:100%; padding:10px; margin-bottom:10px; border-radius:8px;" placeholder="Örn: 1500.50">
-
-                    <label for="maintenance-desc" style="margin-top:10px; display:block;">Yapılan İşlemler / Açıklama</label>
-                    <textarea id="maintenance-desc" rows="3" style="width:100%; padding:10px; margin-bottom:10px; border-radius:8px;" placeholder="Örn: Yağ değişimi, filtreler vs."></textarea>
-
-                    <button type="submit" class="btn-primary" style="margin-top:20px; width:100%; padding:12px; border-radius:8px;">Kaydet</button>
-                </form>
-            </div>
-
-
-            <!-- Listeleme Ekranı (YENİ) -->
-            <div id="maintenance-list-view" class="hidden">
-                <div class="table-responsive" style="max-height:400px; overflow-y:auto;">
-                    <table class="report-table" style="width:100%;">
-                        <thead>
-                            <tr>
-                                <th>Tarih</th>
-                                <th>Plaka</th>
-                                <th>Firma</th>
-                                <th>KM</th>
-                                <th>Tutar</th>
-                                <th>İşlem</th>
-                            </tr>
-                        </thead>
-                        <tbody id="maintenance-table-body">
-                            <tr><td colspan="6" style="text-align:center;">Yükleniyor...</td></tr>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-
-        </div>
     </section>
 
     
@@ -988,7 +1007,7 @@
     <!-- Tesseract.js for OCR -->
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
     <script src="/static/js/ocr-utils.js?v=24"></script>
-    <script src="/static/js/main.js?v=74"></script>
+    <script src="/static/js/main.js?v=75"></script>
 
     <script>
         // Sayfa değiştiğinde ana başlığı (Fatura İşleme Sistemi benzeri) gizle/göster
