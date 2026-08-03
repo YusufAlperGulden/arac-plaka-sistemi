@@ -5442,22 +5442,16 @@ document.addEventListener('DOMContentLoaded', () => {
     // ==========================================
     // ARAÇ BAKIM TAKİP MODÜLÜ
     // ==========================================
-    async function loadMaintenanceVehicles() {
-        try {
-            const res = await fetch('/api/vehicles');
-            if (!res.ok) return;
-            const data = await res.json();
-            const select = document.getElementById('maintenance-vehicle');
-            select.innerHTML = '<option value="" disabled selected>Araç Seçiniz</option>';
-            data.forEach(v => {
-                const opt = document.createElement('option');
-                opt.value = v.id;
-                opt.textContent = v.plate;
-                select.appendChild(opt);
-            });
-        } catch (e) {
-            console.error('Araçlar yüklenemedi:', e);
-        }
+            function loadMaintenanceVehicles() {
+        const select = document.getElementById('maintenance-vehicle');
+        select.innerHTML = '<option value="" disabled selected>Araç Seçiniz</option>';
+        const vehicles = Array.from(registeredVehiclesByPlate.values());
+        vehicles.forEach(v => {
+            const opt = document.createElement('option');
+            opt.value = v.id;
+            opt.textContent = v.displayLabel || v.plate;
+            select.appendChild(opt);
+        });
     }
 
     window.submitMaintenanceForm = async function(e) {
