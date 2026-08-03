@@ -1402,3 +1402,83 @@ body.light-mode #global-top-bar button:hover {
     0% { left: -50%; }
     100% { left: 100%; }
 }
+
+
+/* =========================================
+   UI/UX HOVER VE GLOW (PARLAMA) EFEKTLERİ
+   ========================================= */
+
+/* Glass Card - Üzerine gelince hafif büyüme ve parlama */
+.glass-card {
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.3s ease;
+}
+.glass-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 15px 35px rgba(var(--primary-color-rgb, 99, 102, 241), 0.2), 
+                0 5px 15px rgba(0, 0, 0, 0.1);
+}
+
+/* Butonlar - Primary (Parlama) */
+.btn-primary {
+    transition: all 0.3s ease, box-shadow 0.3s ease, transform 0.2s ease;
+    position: relative;
+    overflow: hidden;
+}
+.btn-primary:hover {
+    transform: translateY(-2px) scale(1.02);
+    box-shadow: 0 0 20px rgba(var(--primary-color-rgb, 99, 102, 241), 0.6), 
+                0 0 40px rgba(var(--primary-color-rgb, 99, 102, 241), 0.2);
+    filter: brightness(1.1);
+}
+.btn-primary:active {
+    transform: translateY(1px) scale(0.98);
+}
+
+/* Butonlar - Secondary (Parlama) */
+.btn-secondary {
+    transition: all 0.3s ease, box-shadow 0.3s ease, transform 0.2s ease;
+}
+.btn-secondary:hover {
+    transform: translateY(-2px) scale(1.02);
+    box-shadow: 0 0 15px rgba(255, 255, 255, 0.1), 
+                inset 0 0 10px rgba(255, 255, 255, 0.05);
+    background: rgba(255, 255, 255, 0.1);
+}
+.btn-secondary:active {
+    transform: translateY(1px) scale(0.98);
+}
+
+/* Input, Select, Textarea odaklanma ve üzerine gelme parlama */
+input, select, textarea {
+    transition: all 0.3s ease, box-shadow 0.3s ease, border-color 0.3s ease;
+}
+input:hover, select:hover, textarea:hover {
+    border-color: var(--primary-color);
+    box-shadow: 0 0 10px rgba(var(--primary-color-rgb, 99, 102, 241), 0.2);
+}
+input:focus, select:focus, textarea:focus {
+    transform: translateY(-1px);
+    box-shadow: 0 0 15px rgba(var(--primary-color-rgb, 99, 102, 241), 0.4), 
+                inset 0 0 5px rgba(var(--primary-color-rgb, 99, 102, 241), 0.1);
+    border-color: var(--primary-color);
+    outline: none;
+}
+
+/* Floating Menu Seçenekleri Hover */
+.glass-panel {
+    transition: all 0.3s ease;
+}
+.glass-panel:hover {
+    background: rgba(255, 255, 255, 0.15) !important;
+    transform: scale(1.05);
+    box-shadow: 0 0 15px rgba(255, 255, 255, 0.2);
+}
+
+/* Tablo satırları hover */
+.report-table tbody tr {
+    transition: background-color 0.2s ease, transform 0.2s ease;
+}
+.report-table tbody tr:hover {
+    background-color: rgba(var(--primary-color-rgb, 99, 102, 241), 0.1);
+    transform: scale(1.01);
+}
