@@ -1482,3 +1482,8 @@ input:focus, select:focus, textarea:focus {
     background-color: rgba(var(--primary-color-rgb, 99, 102, 241), 0.1);
     transform: scale(1.01);
 }
+
+/* report-table hücre boşlukları (padding) */
+.report-table th, .report-table td {
+    padding: 15px;
+}
