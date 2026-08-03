@@ -5442,39 +5442,6 @@ document.addEventListener('DOMContentLoaded', () => {
     // ==========================================
     // ARAÇ BAKIM TAKİP MODÜLÜ
     // ==========================================
-    window.switchMaintenanceCenterTab = async function(tab) {
-        const remindersView = document.getElementById('maintenance-reminders-view');
-        const addView = document.getElementById('maintenance-add-view');
-        const listView = document.getElementById('maintenance-list-view');
-        
-        const btnReminders = document.getElementById('tab-maintenance-reminders');
-        const btnAdd = document.getElementById('tab-maintenance-add');
-        const btnList = document.getElementById('tab-maintenance-list');
-        
-        // Önce hepsini gizle
-        if(remindersView) remindersView.classList.add('hidden');
-        if(addView) addView.classList.add('hidden');
-        if(listView) listView.classList.add('hidden');
-        
-        // Buton renklerini sıfırla
-        if(btnReminders) btnReminders.style.color = 'var(--text-secondary)';
-        if(btnAdd) btnAdd.style.color = 'var(--text-secondary)';
-        if(btnList) btnList.style.color = 'var(--text-secondary)';
-
-        if (tab === 'reminders') {
-            if(remindersView) remindersView.classList.remove('hidden');
-            if(btnReminders) btnReminders.style.color = 'var(--primary-color)';
-        } else if (tab === 'add') {
-            if(addView) addView.classList.remove('hidden');
-            if(btnAdd) btnAdd.style.color = 'var(--primary-color)';
-            await loadMaintenanceVehicles();
-        } else if (tab === 'list') {
-            if(listView) listView.classList.remove('hidden');
-            if(btnList) btnList.style.color = 'var(--primary-color)';
-            window.fetchMaintenanceList();
-        }
-    };
-
     async function loadMaintenanceVehicles() {
         try {
             const res = await fetch('/api/vehicles');
@@ -5516,12 +5483,63 @@ document.addEventListener('DOMContentLoaded', () => {
             if (res.ok) {
                 showToast(data.message || 'Başarıyla eklendi', 'success');
                 document.getElementById('maintenance-form').reset();
-                window.switchMaintenanceCenterTab('list');
+                window.switchMainMaintenanceTab('list');
             } else {
                 showToast(data.error || 'Hata oluştu', 'error');
             }
         } catch (err) {
             showToast('Sunucu hatası', 'error');
+        }
+    };
+
+    
+    const mainMaintenanceSection = document.getElementById('main-maintenance-section');
+    const mainMaintenanceBtn = document.getElementById('action-maintenance-btn');
+    const backFromMainMaintenanceBtn = document.getElementById('back-from-main-maintenance-btn');
+
+    // Make sure we include mainMaintenanceSection in hideAllSections
+    // Since hideAllSections uses an array, we will just add logic directly, or we can append it dynamically.
+    
+    function showMainMaintenanceSection() {
+        hideAllSections();
+        if (mainMaintenanceSection) {
+            mainMaintenanceSection.classList.remove('hidden');
+            mainMaintenanceSection.classList.add('active');
+        }
+        window.switchMainMaintenanceTab('add');
+    }
+
+    if (mainMaintenanceBtn) {
+        mainMaintenanceBtn.addEventListener('click', showMainMaintenanceSection);
+    }
+    if (backFromMainMaintenanceBtn) {
+        backFromMainMaintenanceBtn.addEventListener('click', showActionSelection);
+    }
+
+    window.switchMainMaintenanceTab = async function(tab) {
+        const addView = document.getElementById('main-maintenance-add-view');
+        const listView = document.getElementById('main-maintenance-list-view');
+        const btnAdd = document.getElementById('tab-btn-add');
+        const btnList = document.getElementById('tab-btn-list');
+        
+        if (addView) {
+            if (tab === 'add') {
+                addView.classList.add('active');
+                addView.classList.remove('hidden');
+                listView.classList.remove('active');
+                listView.classList.add('hidden');
+                btnAdd.classList.add('active');
+                btnList.classList.remove('active');
+                await loadMaintenanceVehicles();
+            } else {
+                addView.classList.remove('active');
+                addView.classList.add('hidden');
+                listView.classList.add('active');
+                listView.classList.remove('hidden');
+                btnAdd.classList.remove('active');
+                btnList.classList.add('active');
+                window.fetchMaintenanceList();
+            }
         }
     };
 
