@@ -5564,7 +5564,7 @@ document.addEventListener('DOMContentLoaded', () => {
             data.forEach(m => {
                 const tr = document.createElement('tr');
                 const statusBadge = m.status === 'ACTIVE' 
-                    ? '<span class="status-badge status-active" style="background:#eab308; color:#fff; padding:4px 8px; border-radius:4px; font-size:11px; font-weight:bold;">BAKIMDA</span>'
+                    ? '<span class="status-badge status-active" style="background:#eab308; color:#000; padding:4px 8px; border-radius:4px; font-size:11px; font-weight:bold;">BAKIMDA</span>'
                     : '<span class="status-badge status-completed" style="background:#22c55e; color:#fff; padding:4px 8px; border-radius:4px; font-size:11px; font-weight:bold;">BİTTİ</span>';
                 
                 tr.innerHTML = `
