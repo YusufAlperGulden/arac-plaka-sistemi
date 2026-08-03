@@ -3376,11 +3376,8 @@ def add_maintenance():
 
 
 @app.route("/api/maintenances/<int:maintenance_id>", methods=["DELETE"])
-@require_authenticated
+@require_admin
 def delete_maintenance(maintenance_id):
-    if not session.get("is_admin"):
-        return jsonify({"error": "Yetkisiz işlem"}), 403
-
     maintenance = VehicleMaintenance.query.get_or_404(maintenance_id)
     try:
         db.session.delete(maintenance)
