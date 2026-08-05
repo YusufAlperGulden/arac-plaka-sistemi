@@ -1004,13 +1004,13 @@ def save_record():
             if not unknown_brand:
                 unknown_brand = Brand(name="Bilinmeyen Marka", active=True)
                 db.session.add(unknown_brand)
-                db.session.commit()
+                db.session.flush()
                 
             unknown_model = db.session.scalar(db.select(VehicleModel).where(VehicleModel.name == "Bilinmeyen Model").where(VehicleModel.brand_id == unknown_brand.id))
             if not unknown_model:
                 unknown_model = VehicleModel(name="Bilinmeyen Model", brand_id=unknown_brand.id, active=True)
                 db.session.add(unknown_model)
-                db.session.commit()
+                db.session.flush()
                 
             vehicle = Vehicle(
                 plate=plate,
@@ -1020,8 +1020,10 @@ def save_record():
                 active=True
             )
             db.session.add(vehicle)
-            db.session.commit()
+            db.session.flush()
         except Exception as e:
+            # We don't rollback the entire session here unless we want the whole request to fail.
+            # But if flush fails, the session might be unusable. So it's better to let it fail or handle it carefully.
             db.session.rollback()
             print("Auto-registration error:", e)
             pass # Fallback to vehicle = None if something goes wrong
@@ -1283,13 +1285,12 @@ def save_record():
             vehicle.current_mileage = mileage
         try:
             db.session.commit()
-        except IntegrityError:
+        except IntegrityError as e:
             db.session.rollback()
             return jsonify({
                 "success": False,
                 "message": (
-                    "Bu araç hareketi başka bir işlem tarafından "
-                    "güncellendi; lütfen tekrar deneyin."
+                    f"Veritabanı Hatası: {str(e)}"
                 ),
             }), 409
         return jsonify({
