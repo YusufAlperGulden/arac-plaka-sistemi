@@ -3206,6 +3206,21 @@ def initialize_database():
             ),
             {"initialization_lock": "arac_plaka_database_seed"},
         )
+        # Fix any out-of-sync sequences
+        tables = [
+            "movement_records", "vehicles", "active_trips",
+            "vehicle_maintenances", "vehicle_reminders",
+            "drivers", "brands", "vehicle_models"
+        ]
+        for table in tables:
+            try:
+                db.session.execute(
+                    text(f"SELECT setval('{table}_id_seq', COALESCE((SELECT MAX(id) FROM {table}), 1), (SELECT MAX(id) IS NOT NULL FROM {table}))")
+                )
+            except Exception as e:
+                # Sequence might not exist or table is empty
+                pass
+        db.session.commit()
 
     seed_marker = db.session.get(AppSetting, "initial_seed_v1")
     if seed_marker is None:
