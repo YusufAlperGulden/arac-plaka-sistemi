@@ -1002,29 +1002,28 @@ def save_record():
         try:
             unknown_brand = db.session.scalar(db.select(Brand).where(Brand.name == "Bilinmeyen Marka"))
             if not unknown_brand:
-                unknown_brand = Brand(name="Bilinmeyen Marka", is_active=True)
+                unknown_brand = Brand(name="Bilinmeyen Marka", active=True)
                 db.session.add(unknown_brand)
                 db.session.commit()
                 
             unknown_model = db.session.scalar(db.select(VehicleModel).where(VehicleModel.name == "Bilinmeyen Model").where(VehicleModel.brand_id == unknown_brand.id))
             if not unknown_model:
-                unknown_model = VehicleModel(name="Bilinmeyen Model", brand_id=unknown_brand.id, is_active=True)
+                unknown_model = VehicleModel(name="Bilinmeyen Model", brand_id=unknown_brand.id, active=True)
                 db.session.add(unknown_model)
                 db.session.commit()
                 
             vehicle = Vehicle(
                 plate=plate,
-                brand_id=unknown_brand.id,
                 model_id=unknown_model.id,
                 year=datetime.now().year,
-                color="Bilinmeyen Renk",
                 current_mileage=0,
-                is_active=True
+                active=True
             )
             db.session.add(vehicle)
             db.session.commit()
         except Exception as e:
             db.session.rollback()
+            print("Auto-registration error:", e)
             pass # Fallback to vehicle = None if something goes wrong
             
     if action == 'pickup':
