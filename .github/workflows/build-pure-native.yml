@@ -27,7 +27,7 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v3
         with:
-          gradle-version: '8.4'
+          gradle-version: '8.9'
 
       - name: Build APK
         working-directory: android-native
@@ -44,10 +44,13 @@ jobs:
           git commit -m "Logs" || true
           git push origin debug-logs-build-pure-native -f
 
+      - name: Rename APK
+        run: mv android-native/app/build/outputs/apk/debug/app-debug.apk android-native/app/build/outputs/apk/debug/Plaka-Sistemi.apk
+
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: Plaka-Sistemi-Native-APK
-          path: android-native/app/build/outputs/apk/debug/app-debug.apk
+          path: android-native/app/build/outputs/apk/debug/Plaka-Sistemi.apk
           if-no-files-found: error
           retention-days: 30
