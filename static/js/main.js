@@ -4230,6 +4230,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
             // [FIX] Kayıtlı olmayan plakaları "Bilinmeyen Araç" olarak almak yerine yeni araç ekleme sayfasına yönlendir
             if (!resolvedPlate.registered && !state.ocrForVehicleRegistration) {
+                ocrConfirmModal.classList.add('hidden');
+                closeCameraSafely();
+                
                 Swal.fire({
                     title: 'Kayıtlı Olmayan Araç',
                     text: `${resolvedPlate.normalized} plakası sistemde kayıtlı değil. İşleme devam etmek için önce aracı kaydetmelisiniz.`,
@@ -4240,12 +4243,10 @@ document.addEventListener('DOMContentLoaded', () => {
                     reverseButtons: true
                 }).then((result) => {
                     if (result.isConfirmed) {
-                        ocrConfirmModal.classList.add('hidden');
-                        closeCameraSafely();
                         // openNewPlateShortcut'a direkt plakayı gönderiyoruz
                         openNewPlateShortcut(resolvedPlate.normalized);
                     } else {
-                        if (typeof resumeAutoScan === 'function') resumeAutoScan();
+                        // Optional: if they cancel, they stay on the previous screen since camera is closed
                     }
                 });
                 return;
