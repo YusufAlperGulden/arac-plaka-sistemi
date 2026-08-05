@@ -1,0 +1,82 @@
+
+Welcome to Gradle 8.9!
+
+Here are the highlights of this release:
+ - Enhanced Error and Warning Messages
+ - IDE Integration Improvements
+ - Daemon JVM Information
+
+For more details see https://docs.gradle.org/8.9/release-notes.html
+
+Starting a Gradle Daemon (subsequent builds will be faster)
+Checking the license for package Android SDK Build-Tools 33.0.1 in /usr/local/lib/android/sdk/licenses
+License for package Android SDK Build-Tools 33.0.1 accepted.
+Preparing "Install Android SDK Build-Tools 33.0.1 v.33.0.1".
+"Install Android SDK Build-Tools 33.0.1 v.33.0.1" ready.
+Installing Android SDK Build-Tools 33.0.1 in /usr/local/lib/android/sdk/build-tools/33.0.1
+"Install Android SDK Build-Tools 33.0.1 v.33.0.1" complete.
+"Install Android SDK Build-Tools 33.0.1 v.33.0.1" finished.
+> Task :app:preBuild UP-TO-DATE
+> Task :app:preDebugBuild UP-TO-DATE
+> Task :app:mergeDebugNativeDebugMetadata NO-SOURCE
+> Task :app:generateDebugResValues
+> Task :app:generateDebugResources
+> Task :app:dataBindingMergeDependencyArtifactsDebug
+> Task :app:packageDebugResources
+> Task :app:mergeDebugResources
+> Task :app:parseDebugLocalResources
+> Task :app:checkDebugAarMetadata
+> Task :app:dataBindingGenBaseClassesDebug
+> Task :app:mapDebugSourceSetPaths
+> Task :app:createDebugCompatibleScreenManifests
+> Task :app:extractDeepLinksDebug
+
+> Task :app:processDebugMainManifest
+package="com.teknopalas.aracplaka.nativeapp" found in source AndroidManifest.xml: /home/runner/work/arac-plaka-sistemi/arac-plaka-sistemi/android-native/app/src/main/AndroidManifest.xml.
+Setting the namespace via the package attribute in the source AndroidManifest.xml is no longer supported, and the value is ignored.
+Recommendation: remove package="com.teknopalas.aracplaka.nativeapp" from the source AndroidManifest.xml: /home/runner/work/arac-plaka-sistemi/arac-plaka-sistemi/android-native/app/src/main/AndroidManifest.xml.
+
+> Task :app:processDebugManifest
+> Task :app:javaPreCompileDebug
+> Task :app:mergeDebugShaders
+> Task :app:processDebugManifestForPackage
+> Task :app:compileDebugShaders NO-SOURCE
+> Task :app:generateDebugAssets UP-TO-DATE
+> Task :app:mergeDebugAssets
+> Task :app:compressDebugAssets
+> Task :app:desugarDebugFileDependencies
+> Task :app:processDebugResources
+> Task :app:checkDebugDuplicateClasses
+
+> Task :app:compileDebugKotlin
+w: file:///home/runner/work/arac-plaka-sistemi/arac-plaka-sistemi/android-native/app/src/main/java/com/teknopalas/aracplaka/nativeapp/MainActivity.kt:54:19 'onBackPressed(): Unit' is deprecated. Deprecated in Java
+
+> Task :app:mergeExtDexDebug
+> Task :app:compileDebugJavaWithJavac
+> Task :app:dexBuilderDebug
+> Task :app:mergeDebugGlobalSynthetics
+> Task :app:processDebugJavaRes
+> Task :app:mergeDebugJniLibFolders
+> Task :app:mergeLibDexDebug
+> Task :app:mergeDebugNativeLibs
+> Task :app:mergeProjectDexDebug
+> Task :app:mergeDebugJavaResource
+> Task :app:validateSigningDebug
+> Task :app:writeDebugAppMetadata
+> Task :app:writeDebugSigningConfigVersions
+
+> Task :app:stripDebugDebugSymbols
+Unable to strip the following libraries, packaging them as they are: libimage_processing_util_jni.so.
+
+> Task :app:packageDebug
+> Task :app:createDebugApkListingFileRedirect
+> Task :app:assembleDebug
+
+Deprecated Gradle features were used in this build, making it incompatible with Gradle 9.0.
+
+You can use '--warning-mode all' to show the individual deprecation warnings and determine if they come from your own scripts or plugins.
+
+For more on this, please refer to https://docs.gradle.org/8.9/userguide/command_line_interface.html#sec:command_line_warnings in the Gradle documentation.
+
+BUILD SUCCESSFUL in 2m 3s
+37 actionable tasks: 37 executed
