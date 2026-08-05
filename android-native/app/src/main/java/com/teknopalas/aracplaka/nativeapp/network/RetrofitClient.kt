@@ -41,7 +41,7 @@ class SessionCookieJar(private val context: Context) : CookieJar {
 }
 
 object RetrofitClient {
-    private const val BASE_URL = "https://arac-plaka-sistemi.onrender.com/"
+    private const val BASE_URL = "https://arac-plaka-okuma-sistemi.onrender.com/"
     private var retrofit: Retrofit? = null
 
     fun getClient(context: Context): Retrofit {
