@@ -1776,7 +1776,7 @@ document.addEventListener('DOMContentLoaded', () => {
         ).then(() => plateSelect.focus());
     }
 
-    function openNewPlateShortcut() {
+    function openNewPlateShortcut(plateToPrefill = null) {
         if (!state.isAdmin) {
             window.showToast(
                 'Yeni araç kaydı için yönetici yetkisi gerekiyor.',
@@ -1787,10 +1787,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
         driverReturnContext = null;
         fleetReturnContext = captureFleetReturnContext();
-        const selectedOption = plateSelect.selectedOptions[0];
-        const temporaryPlate = selectedOption?.dataset.ocrTemporary === 'true'
-            ? selectedOption.value
-            : '';
+        
+        let temporaryPlate = plateToPrefill;
+        if (!temporaryPlate) {
+            const selectedOption = plateSelect.selectedOptions[0];
+            temporaryPlate = selectedOption?.dataset.ocrTemporary === 'true'
+                ? selectedOption.value
+                : '';
+        }
+        
         showFleetManagement({
             initialTab: 'vehicles',
             preserveReturnContext: true,
@@ -4220,6 +4225,29 @@ document.addEventListener('DOMContentLoaded', () => {
 
             if (!resolvedPlate) {
                 window.showToast('Geçerli bir Türk plakası girin.', 'error');
+                return;
+            }
+
+            // [FIX] Kayıtlı olmayan plakaları "Bilinmeyen Araç" olarak almak yerine yeni araç ekleme sayfasına yönlendir
+            if (!resolvedPlate.registered && !state.ocrForVehicleRegistration) {
+                Swal.fire({
+                    title: 'Kayıtlı Olmayan Araç',
+                    text: `${resolvedPlate.normalized} plakası sistemde kayıtlı değil. İşleme devam etmek için önce aracı kaydetmelisiniz.`,
+                    icon: 'warning',
+                    showCancelButton: true,
+                    confirmButtonText: 'Şimdi Kaydet',
+                    cancelButtonText: 'İptal',
+                    reverseButtons: true
+                }).then((result) => {
+                    if (result.isConfirmed) {
+                        ocrConfirmModal.classList.add('hidden');
+                        closeCameraSafely();
+                        // openNewPlateShortcut'a direkt plakayı gönderiyoruz
+                        openNewPlateShortcut(resolvedPlate.normalized);
+                    } else {
+                        if (typeof resumeAutoScan === 'function') resumeAutoScan();
+                    }
+                });
                 return;
             }
 
