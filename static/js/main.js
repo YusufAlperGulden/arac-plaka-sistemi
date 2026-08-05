@@ -3913,7 +3913,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (isOcrProcessing) {
             return false;
         }
-        if (!isPlateListReady) {
+        if (!state.ocrForVehicleRegistration && !isPlateListReady) {
             if (!automatic) {
                 window.showToast('Kayıtlı plakalar henüz yükleniyor.', 'warning');
             }
@@ -4121,7 +4121,7 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        if (!isVideoReady(video) || isOcrProcessing || !isPlateListReady) {
+        if (!isVideoReady(video) || isOcrProcessing || (!state.ocrForVehicleRegistration && !isPlateListReady)) {
             scheduleAutoScan();
             return;
         }
