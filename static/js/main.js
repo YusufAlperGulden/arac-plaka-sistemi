@@ -5691,4 +5691,69 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
 
+    // SPA Android Back Button History API Entegrasyonu
+    let isNavigatingBack = false;
+    history.replaceState({ page: 'root' }, "");
+
+    window.addEventListener('popstate', (e) => {
+        const activeSection = document.querySelector('.screen-section.active');
+        if (!activeSection) return;
+        const id = activeSection.id;
+
+        const profileModal = document.getElementById('profile-modal');
+        if (profileModal && !profileModal.classList.contains('hidden')) {
+            profileModal.classList.add('hidden');
+            history.pushState({ page: 'sub' }, ""); 
+            return;
+        }
+        
+        const ocrConfirmModal = document.getElementById('ocr-confirm-modal');
+        if (ocrConfirmModal && !ocrConfirmModal.classList.contains('hidden')) {
+            ocrConfirmModal.classList.add('hidden');
+            if (typeof resumeAutoScan === 'function') resumeAutoScan();
+            history.pushState({ page: 'sub' }, "");
+            return;
+        }
+
+        if (id === 'action-selection-section' || id === 'login-section') {
+            return; 
+        }
+
+        const backBtn = activeSection.querySelector('.btn-back, button[id$="-back-btn"], button[id^="back-"]');
+        if (backBtn) {
+            isNavigatingBack = true; 
+            backBtn.click();
+            setTimeout(() => { isNavigatingBack = false; }, 100);
+        } else if (typeof showActionSelection === 'function') {
+            isNavigatingBack = true;
+            showActionSelection();
+            setTimeout(() => { isNavigatingBack = false; }, 100);
+        }
+    });
+
+    document.addEventListener('click', (e) => {
+        const backBtn = e.target.closest('.btn-back, button[id$="-back-btn"], button[id^="back-"]');
+        if (backBtn && !isNavigatingBack) {
+            isNavigatingBack = true;
+            history.back();
+            setTimeout(() => { isNavigatingBack = false; }, 100);
+        }
+    });
+
+    const observer = new MutationObserver((mutations) => {
+        mutations.forEach((mutation) => {
+            if (mutation.target.classList.contains('active')) {
+                const newSection = mutation.target.id;
+                if (newSection !== 'action-selection-section' && newSection !== 'login-section') {
+                    if (!isNavigatingBack) {
+                        history.pushState({ page: 'sub' }, "");
+                    }
+                }
+            }
+        });
+    });
+
+    document.querySelectorAll('.screen-section').forEach(sec => {
+        observer.observe(sec, { attributes: true, attributeFilter: ['class'] });
+    });
 });
